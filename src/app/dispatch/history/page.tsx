@@ -50,13 +50,13 @@ export default function DispatchHistoryPage() {
     <div className="p-6">
       <h1 className="text-3xl font-bold mb-6">Dispatch History</h1>
 
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+      <div className="bg-card p-6 rounded-lg shadow-sm border border-border">
         {dispatches.length === 0 ? (
           <p className="text-gray-600">No dispatch records found.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-muted">
                 <tr>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Dispatch ID
@@ -78,10 +78,10 @@ export default function DispatchHistoryPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-card divide-y divide-gray-200">
                 {dispatches.map((dispatch) => (
                   <tr key={dispatch.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{dispatch.id}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">{dispatch.id}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getDeviceImei(dispatch.deviceId)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getCustomerName(dispatch.customerId)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{dispatch.dispatchedBy}</td>
@@ -97,3 +97,6 @@ export default function DispatchHistoryPage() {
     </div>
   );
 }
+
+
+

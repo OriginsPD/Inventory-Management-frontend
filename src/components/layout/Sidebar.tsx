@@ -1,70 +1,87 @@
 'use client';
 
 import Link from 'next/link';
-import { Home, Package, Send, CheckSquare, AlertTriangle, RefreshCw, BarChart, Shield, User } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { 
+  Home, 
+  Package, 
+  Send, 
+  CheckSquare, 
+  AlertTriangle, 
+  RefreshCw, 
+  BarChart, 
+  Shield, 
+  Users,
+  Layers
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const Sidebar = () => {
+  const pathname = usePathname();
+
+  const navItems = [
+    { name: 'Dashboard', href: '/', icon: Home },
+    { name: 'Device Models', href: '/device-models', icon: Layers },
+    { name: 'Devices', href: '/devices', icon: Package },
+    { name: 'Customers', href: '/customers', icon: Users },
+    { name: 'Dispatch', href: '/dispatch', icon: Send },
+    { name: 'Testing', href: '/testing/start', icon: CheckSquare },
+    { name: 'Damage Log', href: '/damage/log', icon: AlertTriangle },
+    { name: 'Replacements', href: '/replacements', icon: RefreshCw },
+    { name: 'Promotions', href: '/promotions', icon: Send },
+    { name: 'Reports', href: '/reports', icon: BarChart },
+    { name: 'Audit Trail', href: '/audit', icon: Shield },
+  ];
+
   return (
-    <aside className="w-64 bg-gray-900 text-white h-screen fixed left-0 top-0 overflow-y-auto flex flex-col">
-      <div className="p-4 flex-1">
-        <h1 className="text-2xl font-bold mb-8 text-blue-500">IMS Admin</h1>
-        <nav className="space-y-2">
-          <Link href="/" className="flex items-center space-x-3 p-3 hover:bg-gray-800 rounded-md transition-colors">
-            <Home size={20} />
-            <span>Dashboard</span>
-          </Link>
-          <Link href="/device-models" className="flex items-center space-x-3 p-3 hover:bg-gray-800 rounded-md transition-colors">
+    <aside className="w-64 bg-zinc-950 text-zinc-400 h-screen fixed left-0 top-0 overflow-y-auto flex flex-col border-r border-zinc-800">
+      <div className="p-6">
+        <Link href="/" className="flex items-center gap-2 mb-10 px-2">
+          <div className="w-8 h-8 bg-zinc-100 rounded-lg flex items-center justify-center text-zinc-950">
             <Package size={20} />
-            <span>Device Models</span>
-          </Link>
-          <Link href="/devices" className="flex items-center space-x-3 p-3 hover:bg-gray-800 rounded-md transition-colors">
-            <Package size={20} />
-            <span>Devices</span>
-          </Link>
-          <Link href="/customers" className="flex items-center space-x-3 p-3 hover:bg-gray-800 rounded-md transition-colors">
-            <User size={20} />
-            <span>Customers</span>
-          </Link>
-          <Link href="/dispatch" className="flex items-center space-x-3 p-3 hover:bg-gray-800 rounded-md transition-colors">
-            <Send size={20} />
-            <span>Dispatch</span>
-          </Link>
-          <Link href="/testing/start" className="flex items-center space-x-3 p-3 hover:bg-gray-800 rounded-md transition-colors">
-            <CheckSquare size={20} />
-            <span>Start Test</span>
-          </Link>
-          <Link href="/testing/complete" className="flex items-center space-x-3 p-3 hover:bg-gray-800 rounded-md transition-colors">
-            <CheckSquare size={20} />
-            <span>Complete Test</span>
-          </Link>
-          <Link href="/damage/log" className="flex items-center space-x-3 p-3 hover:bg-gray-800 rounded-md transition-colors">
-            <AlertTriangle size={20} />
-            <span>Log Damage</span>
-          </Link>
-          <Link href="/replacements" className="flex items-center space-x-3 p-3 hover:bg-gray-800 rounded-md transition-colors">
-            <RefreshCw size={20} />
-            <span>Replacements</span>
-          </Link>
-          <Link href="/promotions" className="flex items-center space-x-3 p-3 hover:bg-gray-800 rounded-md transition-colors">
-            <Send size={20} />
-            <span>Promotions</span>
-          </Link>
-          <Link href="/reports" className="flex items-center space-x-3 p-3 hover:bg-gray-800 rounded-md transition-colors">
-            <BarChart size={20} />
-            <span>Reports</span>
-          </Link>
-          <Link href="/audit" className="flex items-center space-x-3 p-3 hover:bg-gray-800 rounded-md transition-colors">
-            <Shield size={20} />
-            <span>Audit Trail</span>
-          </Link>
+          </div>
+          <span className="text-xl font-bold text-zinc-100 tracking-tight">IMS Pro</span>
+        </Link>
+        
+        <nav className="space-y-1">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={cn(
+                  "flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group",
+                  isActive 
+                    ? "bg-zinc-800 text-zinc-100 shadow-sm" 
+                    : "hover:bg-zinc-900 hover:text-zinc-200"
+                )}
+              >
+                <item.icon size={18} className={cn(
+                  "transition-colors",
+                  isActive ? "text-zinc-100" : "text-zinc-500 group-hover:text-zinc-300"
+                )} />
+                <span className="text-sm font-medium">{item.name}</span>
+              </Link>
+            );
+          })}
         </nav>
       </div>
 
-      <div className="p-4 bg-gray-800 border-t border-gray-700 text-center">
-        <p className="text-xs text-gray-500">Inventory Management System v1.0</p>
+      <div className="mt-auto p-6 border-t border-zinc-900">
+        <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800/50">
+          <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mb-1">System Status</p>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-zinc-400 rounded-full animate-pulse" />
+            <span className="text-xs text-zinc-400 font-medium">Internal Core Stable</span>
+          </div>
+        </div>
       </div>
     </aside>
   );
 };
 
 export default Sidebar;
+
+
+

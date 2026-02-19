@@ -1,152 +1,259 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { AlertTriangle, Loader2, CheckCircle2 } from 'lucide-react';
+
 import { fetchDevices, createDeviceDamage } from '@/lib/api';
 import { Device } from '@/types/devices';
-import { CreateDeviceDamageDto } from '@/types/device-damage';
+import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
+
+const formSchema = z.object({
+  deviceId: z.string().uuid('Please select a valid device'),
+  issueDescription: z.string().min(5, 'Description must be at least 5 characters'),
+  reportedBy: z.string().min(2, 'Name must be at least 2 characters').optional().or(z.literal('')),
+  reportedDate: z.string().optional(),
+});
 
 export default function LogDamagePage() {
   const [devices, setDevices] = useState<Device[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
-  const [damageForm, setDamageForm] = useState<CreateDeviceDamageDto>({
-    deviceId: '',
-    issueDescription: '',
-    reportedBy: '',
-    reportedDate: new Date().toISOString().slice(0, 16), // YYYY-MM-DDTHH:mm
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      deviceId: '',
+      issueDescription: '',
+      reportedBy: '',
+      reportedDate: new Date().toISOString().slice(0, 16),
+    },
   });
-  const [logDamageLoading, setLogDamageLoading] = useState(false);
-  const [logDamageError, setLogDamageError] = useState<string | null>(null);
-  const [logDamageSuccess, setLogDamageSuccess] = useState<string | null>(null);
-
 
   useEffect(() => {
-    async function loadData() {
+    async function loadDevices() {
       try {
         const fetchedDevices = await fetchDevices();
-        setDevices(fetchedDevices);
+        // Filter out already replaced or damaged devices if needed, 
+        // but typically any device can be reported as damaged.
+        setDevices(fetchedDevices.filter(d => d.status !== 'REPLACED'));
       } catch (err: any) {
-        setError(err.message);
+        toast({
+          title: "Error loading devices",
+          description: err.message,
+          variant: "destructive",
+        });
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     }
-    loadData();
-  }, []);
+    loadDevices();
+  }, [toast]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setDamageForm(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLogDamageLoading(true);
-    setLogDamageError(null);
-    setLogDamageSuccess(null);
+  async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
-      if (!damageForm.deviceId || !damageForm.issueDescription) {
-        throw new Error("Please fill in all required fields.");
-      }
-      const loggedDamage = await createDeviceDamage(damageForm);
-      setLogDamageSuccess(`Damage logged successfully! Record ID: ${loggedDamage.id}. Device status updated to DAMAGED.`);
-      setDamageForm({ // Reset form
+      // Convert local datetime-local string to ISO if present
+      const payload = {
+        ...values,
+        reportedDate: values.reportedDate ? new Date(values.reportedDate).toISOString() : undefined,
+        reportedBy: values.reportedBy || undefined,
+      };
+
+      await createDeviceDamage(payload as any);
+      
+      toast({
+        title: "Damage Logged",
+        description: "The device status has been updated to DAMAGED.",
+      });
+      
+      form.reset({
         deviceId: '',
         issueDescription: '',
         reportedBy: '',
         reportedDate: new Date().toISOString().slice(0, 16),
       });
-      // Refresh devices list to reflect status change
-      const updatedDevices = await fetchDevices();
-      setDevices(updatedDevices);
 
+      // Refresh list
+      const fetchedDevices = await fetchDevices();
+      setDevices(fetchedDevices.filter(d => d.status !== 'REPLACED'));
     } catch (err: any) {
-      setLogDamageError(err.message);
-    } finally {
-      setLogDamageLoading(false);
+      toast({
+        title: "Submission Failed",
+        description: err.message,
+        variant: "destructive",
+      });
     }
-  };
+  }
 
-  if (loading) return <div className="p-6">Loading devices...</div>;
-  if (error) return <div className="p-6 text-red-500">Error: {error}</div>;
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-zinc-500" />
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6">Log Device Damage</h1>
+    <div className="max-w-3xl mx-auto space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
+          <AlertTriangle className="h-8 w-8 text-zinc-600" />
+          Log Device Damage
+        </h1>
+        <p className="text-muted-foreground mt-1 text-lg">
+          Report technical anomalies or physical damage to assets.
+        </p>
+      </div>
 
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 mb-8">
-        <h2 className="text-xl font-semibold mb-4">Record New Damage</h2>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <Card className="border-border shadow-md bg-card">
+        <CardHeader>
+          <CardTitle className="text-xl">Anomaly Report</CardTitle>
+          <CardDescription>
+            This action will move the device status to DAMAGED and create an audit entry.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="deviceId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Select Device</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="h-12 border-border bg-muted/30">
+                            <SelectValue placeholder="Search by IMEI..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {devices.map((device) => (
+                            <SelectItem key={device.id} value={device.id}>
+                              {device.imei} ({device.status})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="reportedBy"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Reported By</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="Technician Name" 
+                          className="h-12 border-border bg-muted/30" 
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="issueDescription"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Detailed Description of Issue</FormLabel>
+                    <FormControl>
+                      <textarea
+                        className="flex min-h-[120px] w-full rounded-md border border-border bg-muted/30 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        placeholder="Please provide details about the damage or malfunction..."
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="reportedDate"
+                render={({ field }) => (
+                  <FormItem className="max-w-[240px]">
+                    <FormLabel>Incident Date/Time</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="datetime-local" 
+                        className="h-12 border-border bg-muted/30" 
+                        {...field} 
+                      />
+                    </FormControl>
+                    <FormDescription>Defaults to current time.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <Button 
+                type="submit" 
+                className="w-full h-12 text-lg font-bold" 
+                variant="destructive"
+                disabled={form.formState.isSubmitting}
+              >
+                {form.formState.isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Logging Anomaly...
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="mr-2 h-5 w-5" />
+                    Record Damage Report
+                  </>
+                )}
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+
+      <div className="bg-muted/50 p-6 rounded-xl border border-border/50">
+        <div className="flex items-start gap-4">
+          <div className="p-2 bg-blue-500/10 rounded-lg">
+            <CheckCircle2 className="h-5 w-5 text-blue-400" />
+          </div>
           <div>
-            <label htmlFor="deviceId" className="block text-sm font-medium text-gray-700 mb-1">Device</label>
-            <select
-              id="deviceId"
-              name="deviceId"
-              value={damageForm.deviceId}
-              onChange={handleInputChange}
-              className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value="">Select a device</option>
-              {devices.map(device => (
-                <option key={device.id} value={device.id}>
-                  {device.imei} (Status: {device.status})
-                </option>
-              ))}
-            </select>
-            {devices.length === 0 && <p className="text-sm text-orange-500 mt-1">No devices available.</p>}
+            <h4 className="font-bold text-foreground">Operational Protocol</h4>
+            <p className="text-sm text-zinc-500 mt-1">
+              Logged damage entries are permanently recorded in the audit trail. 
+              The technical team will be notified of this status change for immediate assessment.
+            </p>
           </div>
-
-          <div>
-            <label htmlFor="reportedBy" className="block text-sm font-medium text-gray-700 mb-1">Reported By (Optional)</label>
-            <input
-              type="text"
-              id="reportedBy"
-              name="reportedBy"
-              placeholder="Name of person reporting"
-              value={damageForm.reportedBy}
-              onChange={handleInputChange}
-              className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label htmlFor="issueDescription" className="block text-sm font-medium text-gray-700 mb-1">Issue Description</label>
-            <textarea
-              id="issueDescription"
-              name="issueDescription"
-              placeholder="Describe the damage..."
-              value={damageForm.issueDescription}
-              onChange={handleInputChange}
-              rows={4}
-              className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-              required
-            ></textarea>
-          </div>
-          
-          <div>
-            <label htmlFor="reportedDate" className="block text-sm font-medium text-gray-700 mb-1">Reported Date (Optional)</label>
-            <input
-              type="datetime-local"
-              id="reportedDate"
-              name="reportedDate"
-              value={damageForm.reportedDate}
-              onChange={handleInputChange}
-              className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="md:col-span-2 p-3 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
-            disabled={logDamageLoading || devices.length === 0}
-          >
-            {logDamageLoading ? 'Logging Damage...' : 'Log Damage'}
-          </button>
-        </form>
-        {logDamageError && <p className="text-red-500 text-sm mt-2">{logDamageError}</p>}
-        {logDamageSuccess && <p className="text-green-600 text-sm mt-2">{logDamageSuccess}</p>}
+        </div>
       </div>
     </div>
   );

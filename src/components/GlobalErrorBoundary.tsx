@@ -31,8 +31,8 @@ class GlobalErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-6">
-          <div className="bg-white p-8 rounded-lg shadow-md max-w-md w-full text-center">
+        <div className="flex flex-col items-center justify-center min-h-screen bg-muted p-6">
+          <div className="bg-card p-8 rounded-lg shadow-md max-w-md w-full text-center">
             <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
             <p className="text-gray-600 mb-6">
               We encountered an unexpected error. Our team has been notified.
@@ -53,3 +53,6 @@ class GlobalErrorBoundary extends Component<Props, State> {
 }
 
 export default GlobalErrorBoundary;
+
+
+

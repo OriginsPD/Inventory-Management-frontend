@@ -1,182 +1,216 @@
-'use client';
+"use client"
 
-import { useState, useEffect } from 'react';
-import { fetchDevices, fetchCustomers, createDispatch } from '@/lib/api';
-import { Device } from '@/types/devices';
-import { Customer } from '@/types/customers';
-import { CreateDispatchDto } from '@/types/dispatches';
+import { useState, useEffect } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
+import { Send, History, CheckCircle2 } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { fetchDevices, fetchCustomers, createDispatch } from "@/lib/api"
+import { Device } from "@/types/devices"
+import { Customer } from "@/types/customers"
+import { useRouter } from "next/navigation"
+import { authClient } from "@/lib/auth-client"
+import { useToast } from "@/hooks/use-toast"
+
+const formSchema = z.object({
+  deviceId: z.string().min(1, { message: "Please select a device." }),
+  customerId: z.string().min(1, { message: "Please select a customer." }),
+  location: z.string().min(2, { message: "Location is required." }),
+})
 
 export default function DispatchPage() {
-  const [inStockDevices, setInStockDevices] = useState<Device[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [devices, setDevices] = useState<Device[]>([])
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [loading, setLoading] = useState(true)
+  const { data: session } = authClient.useSession()
+  const router = useRouter()
+  const { toast } = useToast()
 
-  const [dispatchForm, setDispatchForm] = useState<CreateDispatchDto>({
-    deviceId: '',
-    customerId: '',
-    dispatchDate: new Date().toISOString().slice(0, 16), // YYYY-MM-DDTHH:mm
-    dispatchedBy: '',
-    location: '',
-  });
-  const [dispatchLoading, setDispatchLoading] = useState(false);
-  const [dispatchError, setDispatchError] = useState<string | null>(null);
-  const [dispatchSuccess, setDispatchSuccess] = useState<string | null>(null);
-
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      deviceId: "",
+      customerId: "",
+      location: "",
+    },
+  })
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [fetchedDevices, fetchedCustomers] = await Promise.all([
+        const [devicesData, customersData] = await Promise.all([
           fetchDevices(),
           fetchCustomers(),
-        ]);
-        setInStockDevices(fetchedDevices.filter(d => d.status === 'IN_STOCK'));
-        setCustomers(fetchedCustomers);
+        ])
+        setDevices(devicesData.filter(d => d.status === 'IN_STOCK'))
+        setCustomers(customersData)
       } catch (err: any) {
-        setError(err.message);
+        toast({ title: "Error", description: "Failed to load dispatch data.", variant: "destructive" })
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
     }
-    loadData();
-  }, []);
+    loadData()
+  }, [toast])
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setDispatchForm(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setDispatchLoading(true);
-    setDispatchError(null);
-    setDispatchSuccess(null);
+  async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
-      if (!dispatchForm.deviceId || !dispatchForm.customerId || !dispatchForm.dispatchedBy || !dispatchForm.dispatchDate) {
-        throw new Error("Please fill in all required fields.");
-      }
-      const createdDispatch = await createDispatch(dispatchForm);
-      setDispatchSuccess(`Dispatch created successfully! ID: ${createdDispatch.id}`);
-      setDispatchForm({ // Reset form and update device list
-        deviceId: '',
-        customerId: '',
-        dispatchDate: new Date().toISOString().slice(0, 16),
-        dispatchedBy: '',
-        location: '',
-      });
-      // Refresh devices to reflect status change
-      const updatedDevices = await fetchDevices();
-      setInStockDevices(updatedDevices.filter(d => d.status === 'IN_STOCK'));
-
+      await createDispatch({
+          ...values,
+          dispatchDate: new Date().toISOString(),
+          dispatchedBy: session?.user.name || "System User",
+      } as any)
+      toast({ title: "Dispatch Confirmed", description: "The asset has been successfully assigned." })
+      router.push("/dispatch/history")
     } catch (err: any) {
-      setDispatchError(err.message);
-    } finally {
-      setDispatchLoading(false);
+      toast({ title: "Dispatch Failed", description: err.message, variant: "destructive" })
     }
-  };
+  }
 
-  if (loading) return <div className="p-6">Loading dispatch data...</div>;
-  if (error) return <div className="p-6 text-red-500">Error: {error}</div>;
+  if (loading) return <div className="p-8 text-center animate-pulse">Preparing dispatch terminal...</div>
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6">Dispatch Device</h1>
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div className="flex justify-between items-end">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Dispatch Asset</h1>
+          <p className="text-muted-foreground">Assign a device to a customer and record the location.</p>
+        </div>
+        <Button variant="outline" size="sm" className="border-border" onClick={() => router.push('/dispatch/history')}>
+          <History className="w-4 h-4 mr-2" /> View History
+        </Button>
+      </div>
 
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 mb-8">
-        <h2 className="text-xl font-semibold mb-4">Create New Dispatch</h2>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="deviceId" className="block text-sm font-medium text-gray-700 mb-1">Device (IN_STOCK)</label>
-            <select
-              id="deviceId"
-              name="deviceId"
-              value={dispatchForm.deviceId}
-              onChange={handleInputChange}
-              className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value="">Select a device</option>
-              {inStockDevices.map(device => (
-                <option key={device.id} value={device.id}>
-                  {device.imei} (Status: {device.status})
-                </option>
-              ))}
-            </select>
-            {inStockDevices.length === 0 && <p className="text-sm text-orange-500 mt-1">No IN_STOCK devices available for dispatch.</p>}
+      <Card className="border border-border shadow-sm overflow-hidden">
+        <CardHeader className="bg-zinc-900 text-zinc-100">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Send className="w-5 h-5 text-zinc-400" /> New Dispatch Record
+          </CardTitle>
+          <CardDescription className="text-zinc-400">
+            Verify device physical condition before proceeding.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-6">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <FormField
+                control={form.control}
+                name="deviceId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-foreground font-semibold">Select Device (Available Stock)</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="h-12 border-border">
+                          <SelectValue placeholder="Search by IMEI..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {devices.length === 0 ? (
+                          <div className="p-2 text-sm text-center text-muted-foreground">No devices in stock</div>
+                        ) : (
+                          devices.map(device => (
+                            <SelectItem key={device.id} value={device.id}>
+                              {device.imei} - {(device as any).modelName}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="customerId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-foreground font-semibold">Customer / Client</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="h-12 border-border">
+                          <SelectValue placeholder="Select destination customer" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {customers.map(customer => (
+                          <SelectItem key={customer.id} value={customer.id}>
+                            {customer.name} {customer.email ? `(${customer.email})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="location"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-foreground font-semibold">Dispatch Location / Branch</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Downtown Office, Warehouse B" className="h-12 border-border" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <Button type="submit" className="w-full h-12 bg-zinc-900 hover:bg-zinc-800 text-white shadow-sm transition-all active:scale-[0.99]">
+                Execute Dispatch
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-3 gap-4">
+          <div className="p-4 bg-muted border border-border rounded-xl flex flex-col items-center justify-center text-center">
+              <CheckCircle2 className="w-5 h-5 text-zinc-400 mb-2" />
+              <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest">Inventory Sync</span>
           </div>
-
-          <div>
-            <label htmlFor="customerId" className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
-            <select
-              id="customerId"
-              name="customerId"
-              value={dispatchForm.customerId}
-              onChange={handleInputChange}
-              className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value="">Select a customer</option>
-              {customers.map(customer => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name} ({customer.email || 'N/A'})
-                </option>
-              ))}
-            </select>
-            {customers.length === 0 && <p className="text-sm text-orange-500 mt-1">No customers available. Please add some first.</p>}
+          <div className="p-4 bg-muted border border-border rounded-xl flex flex-col items-center justify-center text-center">
+              <CheckCircle2 className="w-5 h-5 text-zinc-400 mb-2" />
+              <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest">Status Update</span>
           </div>
-
-          <div>
-            <label htmlFor="dispatchDate" className="block text-sm font-medium text-gray-700 mb-1">Dispatch Date</label>
-            <input
-              type="datetime-local"
-              id="dispatchDate"
-              name="dispatchDate"
-              value={dispatchForm.dispatchDate}
-              onChange={handleInputChange}
-              className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
+          <div className="p-4 bg-muted border border-border rounded-xl flex flex-col items-center justify-center text-center">
+              <CheckCircle2 className="w-5 h-5 text-zinc-400 mb-2" />
+              <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest">Audit Secure</span>
           </div>
-
-          <div>
-            <label htmlFor="dispatchedBy" className="block text-sm font-medium text-gray-700 mb-1">Dispatched By</label>
-            <input
-              type="text"
-              id="dispatchedBy"
-              name="dispatchedBy"
-              placeholder="Name of dispatcher"
-              value={dispatchForm.dispatchedBy}
-              onChange={handleInputChange}
-              className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">Location (Optional)</label>
-            <input
-              type="text"
-              id="location"
-              name="location"
-              placeholder="Dispatch location"
-              value={dispatchForm.location}
-              onChange={handleInputChange}
-              className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="md:col-span-2 p-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-            disabled={dispatchLoading || inStockDevices.length === 0 || customers.length === 0}
-          >
-            {dispatchLoading ? 'Dispatching...' : 'Dispatch Device'}
-          </button>
-        </form>
-        {dispatchError && <p className="text-red-500 text-sm mt-2">{dispatchError}</p>}
-        {dispatchSuccess && <p className="text-green-600 text-sm mt-2">{dispatchSuccess}</p>}
       </div>
     </div>
-  );
+  )
 }
+
+
+

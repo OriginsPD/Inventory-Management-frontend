@@ -41,13 +41,13 @@ export default function DamageHistoryPage() {
     <div className="p-6">
       <h1 className="text-3xl font-bold mb-6">Device Damage History</h1>
 
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+      <div className="bg-card p-6 rounded-lg shadow-sm border border-border">
         {deviceDamages.length === 0 ? (
           <p className="text-gray-600">No device damage records found.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-muted">
                 <tr>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Damage ID
@@ -69,10 +69,10 @@ export default function DamageHistoryPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-card divide-y divide-gray-200">
                 {deviceDamages.map((damage) => (
                   <tr key={damage.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{damage.id}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">{damage.id}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getDeviceImei(damage.deviceId)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{damage.issueDescription}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{damage.reportedBy || 'N/A'}</td>
@@ -88,3 +88,6 @@ export default function DamageHistoryPage() {
     </div>
   );
 }
+
+
+

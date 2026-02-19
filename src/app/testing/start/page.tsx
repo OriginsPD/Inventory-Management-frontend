@@ -1,139 +1,209 @@
-'use client';
+"use client"
 
-import { useState, useEffect } from 'react';
-import { fetchDevices, startDeviceTest } from '@/lib/api';
-import { Device } from '@/types/devices';
-import { StartDeviceTestDto } from '@/types/device-testing';
+import { useState, useEffect } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
+import { Activity, ClipboardCheck, User, ShieldCheck } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { fetchDevices, startDeviceTest } from "@/lib/api"
+import { Device } from "@/types/devices"
+import { useToast } from "@/hooks/use-toast"
+
+const formSchema = z.object({
+  deviceId: z.string().min(1, { message: "Please select a device." }),
+  handedTo: z.string().min(2, { message: "Recipient name is required." }),
+  authCode: z.string().optional(),
+})
 
 export default function StartTestPage() {
-  const [eligibleDevices, setEligibleDevices] = useState<Device[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [eligibleDevices, setEligibleDevices] = useState<Device[]>([])
+  const [loading, setLoading] = useState(true)
+  const { toast } = useToast()
 
-  const [testForm, setTestForm] = useState<StartDeviceTestDto>({
-    deviceId: '',
-    handedTo: '',
-    authCode: '',
-  });
-  const [startTestLoading, setStartTestLoading] = useState(false);
-  const [startTestError, setStartTestError] = useState<string | null>(null);
-  const [startTestSuccess, setStartTestSuccess] = useState<string | null>(null);
-
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      deviceId: "",
+      handedTo: "",
+      authCode: "",
+    },
+  })
 
   useEffect(() => {
     async function loadData() {
       try {
-        const fetchedDevices = await fetchDevices();
-        setEligibleDevices(fetchedDevices.filter(d => d.status === 'IN_STOCK' || d.status === 'DISPATCHED'));
+        const fetchedDevices = await fetchDevices()
+        setEligibleDevices(fetchedDevices.filter(d => d.status === 'IN_STOCK' || d.status === 'DISPATCHED'))
       } catch (err: any) {
-        setError(err.message);
+        toast({ title: "Error", description: "Failed to load devices.", variant: "destructive" })
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
     }
-    loadData();
-  }, []);
+    loadData()
+  }, [toast])
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setTestForm(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setStartTestLoading(true);
-    setStartTestError(null);
-    setStartTestSuccess(null);
+  async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
-      if (!testForm.deviceId || !testForm.handedTo) {
-        throw new Error("Please fill in all required fields.");
-      }
-      const startedTest = await startDeviceTest(testForm);
-      setStartTestSuccess(`Test started successfully! Test ID: ${startedTest.id}. Device status updated to TESTING.`);
-      setTestForm({ // Reset form
-        deviceId: '',
-        handedTo: '',
-        authCode: '',
-      });
-      // Refresh devices list to reflect status change (device moved to TESTING)
-      const updatedDevices = await fetchDevices();
-      setEligibleDevices(updatedDevices.filter(d => d.status === 'IN_STOCK' || d.status === 'DISPATCHED'));
-
+      await startDeviceTest(values as any)
+      toast({ title: "Test Initialized", description: "The device has been moved to technical testing." })
+      form.reset()
+      
+      const updatedDevices = await fetchDevices()
+      setEligibleDevices(updatedDevices.filter(d => d.status === 'IN_STOCK' || d.status === 'DISPATCHED'))
     } catch (err: any) {
-      setStartTestError(err.message);
-    } finally {
-      setStartTestLoading(false);
+      toast({ title: "Error", description: err.message, variant: "destructive" })
     }
-  };
+  }
 
-  if (loading) return <div className="p-6">Loading eligible devices...</div>;
-  if (error) return <div className="p-6 text-red-500">Error: {error}</div>;
+  if (loading) return <div className="p-8 text-center animate-pulse text-zinc-500 uppercase tracking-widest font-bold text-xs">Initializing Quality Module...</div>
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6">Start Device Test</h1>
+    <div className="max-w-3xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Technical QC Start</h1>
+        <p className="text-muted-foreground">Initiate a quality control session for a physical asset.</p>
+      </div>
 
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 mb-8">
-        <h2 className="text-xl font-semibold mb-4">Start New Test</h2>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="deviceId" className="block text-sm font-medium text-gray-700 mb-1">Device (IN_STOCK or DISPATCHED)</label>
-            <select
-              id="deviceId"
-              name="deviceId"
-              value={testForm.deviceId}
-              onChange={handleInputChange}
-              className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value="">Select a device</option>
-              {eligibleDevices.map(device => (
-                <option key={device.id} value={device.id}>
-                  {device.imei} (Current Status: {device.status})
-                </option>
-              ))}
-            </select>
-            {eligibleDevices.length === 0 && <p className="text-sm text-orange-500 mt-1">No eligible devices available for testing.</p>}
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="md:col-span-2">
+          <Card className="border border-border shadow-sm">
+            <CardHeader className="border-b border-border bg-muted/50">
+              <CardTitle className="text-lg flex items-center gap-2 text-foreground">
+                <Activity className="w-5 h-5 text-zinc-400" /> Test Initialization
+              </CardTitle>
+              <CardDescription>Assign a unit to a technician for assessment.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+                  <FormField
+                    control={form.control}
+                    name="deviceId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Select Device</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger className="border-border">
+                              <SelectValue placeholder="Select by IMEI" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {eligibleDevices.map(device => (
+                              <SelectItem key={device.id} value={device.id}>
+                                {device.imei} ({(device as any).modelName})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-          <div>
-            <label htmlFor="handedTo" className="block text-sm font-medium text-gray-700 mb-1">Handed To</label>
-            <input
-              type="text"
-              id="handedTo"
-              name="handedTo"
-              placeholder="Name of person receiving device for test"
-              value={testForm.handedTo}
-              onChange={handleInputChange}
-              className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="handedTo"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Technician Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Full name" className="border-border" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="authCode"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Auth Code (Optional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="QC-XXXX" className="border-border" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-          <div className="md:col-span-2">
-            <label htmlFor="authCode" className="block text-sm font-medium text-gray-700 mb-1">Auth Code (Optional)</label>
-            <input
-              type="text"
-              id="authCode"
-              name="authCode"
-              placeholder="Authorization code if applicable"
-              value={testForm.authCode}
-              onChange={handleInputChange}
-              className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-zinc-900 hover:bg-zinc-800 text-white shadow-sm"
+                    disabled={eligibleDevices.length === 0}
+                  >
+                    Authorize & Begin Test
+                  </Button>
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
+        </div>
 
-          <button
-            type="submit"
-            className="md:col-span-2 p-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-            disabled={startTestLoading || eligibleDevices.length === 0}
-          >
-            {startTestLoading ? 'Starting Test...' : 'Start Test'}
-          </button>
-        </form>
-        {startTestError && <p className="text-red-500 text-sm mt-2">{startTestError}</p>}
-        {startTestSuccess && <p className="text-green-600 text-sm mt-2">{startTestSuccess}</p>}
+        <div className="space-y-4">
+            <Card className="border border-border shadow-sm bg-muted">
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">QC Protocol</CardTitle>
+                </CardHeader>
+                <CardContent className="text-[11px] text-zinc-600 space-y-3 leading-relaxed">
+                    <div className="flex items-start gap-2">
+                        <ShieldCheck className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                        <span>Visual inspection of chassis and ports.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                        <ShieldCheck className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                        <span>Battery health within threshold.</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                        <ShieldCheck className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                        <span>Display dead pixel scan.</span>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <div className="p-4 rounded-xl border border-border flex items-center gap-3 bg-card">
+                <div className="w-10 h-10 rounded-full bg-zinc-100 flex items-center justify-center">
+                    <User className="w-5 h-5 text-zinc-400" />
+                </div>
+                <div>
+                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider leading-none mb-1">Supervisor</p>
+                    <p className="text-sm font-semibold text-foreground leading-none tracking-tight">Internal Auditor</p>
+                </div>
+            </div>
+        </div>
       </div>
     </div>
-  );
+  )
 }
+
+
+

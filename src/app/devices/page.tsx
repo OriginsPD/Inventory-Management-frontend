@@ -1,229 +1,472 @@
-'use client';
+"use client"
 
-import { useState, useEffect } from 'react';
-import { fetchDevices, fetchDeviceModels, refillStock } from '@/lib/api';
-import { Device, DeviceStatus, StockRefillDto } from '@/types/devices';
-import { DeviceModel } from '@/types/device-models';
-import Link from 'next/link'; // For potentially linking to device details
+import { useState, useEffect } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
+import { Plus, Package, Trash2, Search, Filter, Edit, Eye, Smartphone, Hash, ShieldCheck, History } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { fetchDevices, createDevice, deleteDevice, fetchDeviceModels, updateDevice } from "@/lib/api"
+import { Device } from "@/types/devices"
+import { DeviceModel } from "@/types/device-models"
+import { cn } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
+
+const formSchema = z.object({
+  imei: z.string().min(15, { message: "IMEI must be at least 15 digits." }),
+  serialNumber: z.string().optional(),
+  modelId: z.string().min(1, { message: "Please select a model." }),
+})
 
 export default function DevicesPage() {
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [deviceModels, setDeviceModels] = useState<DeviceModel[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [devices, setDevices] = useState<Device[]>([])
+  const [models, setModels] = useState<DeviceModel[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState("")
+  const { toast } = useToast()
 
-  const [filterStatus, setFilterStatus] = useState<string>('ALL');
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  // Modal states
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [editingDevice, setEditingDevice] = useState<Device | null>(null)
+  const [viewingDevice, setViewingDevice] = useState<Device | null>(null)
 
-  const [refillForm, setRefillForm] = useState<StockRefillDto>({ modelId: '', quantity: 1 });
-  const [refillLoading, setRefillLoading] = useState(false);
-  const [refillError, setRefillError] = useState<string | null>(null);
-  const [refillSuccess, setRefillSuccess] = useState<string | null>(null);
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      imei: "",
+      serialNumber: "",
+      modelId: "",
+    },
+  })
 
-  const statuses: DeviceStatus[] = ['IN_STOCK', 'DISPATCHED', 'TESTING', 'DAMAGED', 'REPLACED', 'PROMOTIONAL'];
+  const editForm = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+  })
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [fetchedDevices, fetchedModels] = await Promise.all([
+        const [devicesData, modelsData] = await Promise.all([
           fetchDevices(),
           fetchDeviceModels(),
-        ]);
-        setDevices(fetchedDevices);
-        setDeviceModels(fetchedModels);
+        ])
+        setDevices(devicesData)
+        setModels(modelsData)
       } catch (err: any) {
-        setError(err.message);
+        toast({
+          title: "Error",
+          description: "Failed to load data.",
+          variant: "destructive"
+        })
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
     }
-    loadData();
-  }, []);
+    loadData()
+  }, [toast])
 
-  const handleRefillChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setRefillForm(prev => ({ ...prev, [name]: name === 'quantity' ? parseInt(value) : value }));
-  };
+  useEffect(() => {
+    if (editingDevice) {
+      editForm.reset({
+        imei: editingDevice.imei,
+        serialNumber: editingDevice.serialNumber || "",
+        modelId: editingDevice.modelId,
+      })
+    }
+  }, [editingDevice, editForm])
 
-  const handleRefillSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setRefillLoading(true);
-    setRefillError(null);
-    setRefillSuccess(null);
+  async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
-      if (!refillForm.modelId) {
-        throw new Error("Please select a device model for refill.");
-      }
-      if (refillForm.quantity <= 0) {
-        throw new Error("Quantity must be positive.");
-      }
-      const createdDevices = await refillStock(refillForm);
-      setDevices(prev => [...prev, ...createdDevices]);
-      setRefillSuccess(`Successfully added ${createdDevices.length} devices.`);
-      setRefillForm({ modelId: '', quantity: 1 });
+      const created = await createDevice(values as any)
+      setDevices((prev) => [created, ...prev])
+      form.reset()
+      toast({
+        title: "Registered",
+        description: `Device ${values.imei} registered successfully.`
+      })
     } catch (err: any) {
-      setRefillError(err.message);
-    } finally {
-      setRefillLoading(false);
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive"
+      })
     }
-  };
+  }
 
+  async function onEditSubmit(values: z.infer<typeof formSchema>) {
+    if (!editingDevice) return
+    try {
+      const updated = await updateDevice(editingDevice.id, values as any)
+      setDevices((prev) => prev.map(d => d.id === updated.id ? updated : d))
+      setEditingDevice(null)
+      toast({
+        title: "Updated",
+        description: "Device information updated."
+      })
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive"
+      })
+    }
+  }
 
-  const getModelName = (modelId: string) => {
-    const model = deviceModels.find(m => m.id === modelId);
-    return model ? `${model.brand} ${model.name}` : modelId;
-  };
+  async function confirmDelete() {
+    if (!deleteId) return
+    try {
+      await deleteDevice(deleteId)
+      setDevices((prev) => prev.filter((d) => d.id !== deleteId))
+      toast({
+        title: "Deleted",
+        description: "Device removed from inventory."
+      })
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive"
+      })
+    } finally {
+      setDeleteId(null)
+    }
+  }
 
-  const filteredDevices = devices.filter(device => {
-    const matchesStatus = filterStatus === 'ALL' || device.status === filterStatus;
-    const matchesSearch = searchTerm === '' || device.imei.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesStatus && matchesSearch;
-  });
+  const filteredDevices = devices.filter(d => 
+    d.imei.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    d.serialNumber?.toLowerCase().includes(searchTerm.toLowerCase())
+  )
 
-
-  if (loading) return <div className="p-6">Loading devices...</div>;
-  if (error) return <div className="p-6 text-red-500">Error: {error}</div>;
+  if (loading) return <div className="p-8 text-center animate-pulse">Loading devices...</div>
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6">Devices Inventory</h1>
-
-      {/* Stock Refill Section */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 mb-8">
-        <h2 className="text-xl font-semibold mb-4">Add Stock</h2>
-        <form onSubmit={handleRefillSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          <div className="md:col-span-2">
-            <label htmlFor="modelId" className="block text-sm font-medium text-gray-700 mb-1">Device Model</label>
-            <select
-              id="modelId"
-              name="modelId"
-              value={refillForm.modelId}
-              onChange={handleRefillChange}
-              className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value="">Select a model</option>
-              {deviceModels.map(model => (
-                <option key={model.id} value={model.id}>
-                  {model.brand} {model.name} ({model.category})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-            <input
-              type="number"
-              id="quantity"
-              name="quantity"
-              placeholder="Quantity"
-              value={refillForm.quantity}
-              onChange={handleRefillChange}
-              min="1"
-              className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            className="p-3 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
-            disabled={refillLoading}
-          >
-            {refillLoading ? 'Adding...' : 'Refill Stock'}
-          </button>
-        </form>
-        {refillError && <p className="text-red-500 text-sm mt-2">{refillError}</p>}
-        {refillSuccess && <p className="text-green-600 text-sm mt-2">{refillSuccess}</p>}
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Devices</h1>
+        <p className="text-muted-foreground">Monitor and manage individual physical assets.</p>
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <Card className="lg:col-span-1 h-fit border-none shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg">Add New Device</CardTitle>
+            <CardDescription>Register a new unit into inventory.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="modelId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Model</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a model" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {models.map(model => (
+                            <SelectItem key={model.id} value={model.id}>
+                              {model.brand} {model.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="imei"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>IMEI</FormLabel>
+                      <FormControl>
+                        <Input placeholder="15-digit identifier" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="serialNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Serial Number</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Manufacturer serial" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button type="submit" className="w-full">Register Device</Button>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
 
-      {/* Filters and Search */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 mb-8 flex flex-col md:flex-row gap-4 items-center">
-        <div className="flex-1 w-full md:w-auto">
-          <label htmlFor="search" className="sr-only">Search by IMEI</label>
-          <input
-            type="text"
-            id="search"
-            placeholder="Search by IMEI"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-        <div className="w-full md:w-auto">
-          <label htmlFor="statusFilter" className="sr-only">Filter by Status</label>
-          <select
-            id="statusFilter"
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="p-3 border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="ALL">All Statuses</option>
-            {statuses.map(status => (
-              <option key={status} value={status}>
-                {status.replace(/_/g, ' ')}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Card className="lg:col-span-3 border-none shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div className="relative w-full max-w-sm">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search IMEI or Serial..."
+                className="pl-8"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <Button variant="outline" size="icon">
+              <Filter className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>IMEI</TableHead>
+                  <TableHead>Model</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredDevices.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="h-24 text-center">No units found.</TableCell>
+                  </TableRow>
+                ) : (
+                  filteredDevices.map((device) => (
+                    <TableRow key={device.id}>
+                      <TableCell className="font-mono text-xs">{device.imei}</TableCell>
+                      <TableCell>{(device as any).modelName || 'Unknown Model'}</TableCell>
+                      <TableCell>
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
+                          device.status === 'IN_STOCK' ? "bg-emerald-50 text-emerald-700" :
+                          device.status === 'DISPATCHED' ? "bg-blue-50 text-blue-700" :
+                          "bg-slate-100 text-slate-600"
+                        )}>
+                          {device.status.replace('_', ' ')}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => setViewingDevice(device)}>
+                            <Eye className="w-4 h-4 text-slate-400 hover:text-blue-600" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => setEditingDevice(device)}>
+                            <Edit className="w-4 h-4 text-slate-400 hover:text-blue-600" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => setDeleteId(device.id)}>
+                            <Trash2 className="w-4 h-4 text-slate-400 hover:text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Devices List Table */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-        <h2 className="text-xl font-semibold mb-4">Existing Devices</h2>
-        {filteredDevices.length === 0 ? (
-          <p className="text-gray-600">No devices found matching criteria.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    IMEI
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Model
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Serial Number
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created At
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredDevices.map((device) => (
-                  <tr key={device.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{device.imei}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getModelName(device.modelId)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          device.status === 'IN_STOCK' ? 'bg-green-100 text-green-800' :
-                          device.status === 'DISPATCHED' ? 'bg-blue-100 text-blue-800' :
-                          device.status === 'DAMAGED' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {device.status.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{device.serialNumber || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(device.createdAt).toLocaleDateString()}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <Link href={`/devices/${device.id}`} className="text-blue-600 hover:text-blue-900">View/Edit</Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* View Detail Dialog */}
+      <Dialog open={!!viewingDevice} onOpenChange={(open) => !open && setViewingDevice(null)}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+                <Smartphone className="w-5 h-5 text-blue-600"/> Asset Intelligence
+            </DialogTitle>
+            <DialogDescription>Individual unit history and metadata.</DialogDescription>
+          </DialogHeader>
+          {viewingDevice && (
+            <div className="space-y-6 py-4">
+                <div className="flex items-center justify-between p-4 bg-slate-900 rounded-xl text-white">
+                    <div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Status</span>
+                        <span className="text-lg font-bold text-emerald-400">{viewingDevice.status.replace('_', ' ')}</span>
+                    </div>
+                    <ShieldCheck className="w-8 h-8 text-slate-700" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 flex items-center gap-1"><Hash className="w-3 h-3"/> IMEI</span>
+                        <span className="text-sm font-mono">{viewingDevice.imei}</span>
+                    </div>
+                    <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 flex items-center gap-1"><Hash className="w-3 h-3"/> Serial</span>
+                        <span className="text-sm font-mono">{viewingDevice.serialNumber || 'N/A'}</span>
+                    </div>
+                </div>
+
+                <div className="p-4 border rounded-xl bg-muted/50 space-y-3">
+                    <div className="flex justify-between items-center text-sm">
+                        <span className="text-slate-500 font-medium">Model Definition</span>
+                        <span className="font-bold text-foreground">{(viewingDevice as any).modelName}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                        <span className="text-slate-500 font-medium">Manufacturer</span>
+                        <span className="font-bold text-foreground">{(viewingDevice as any).brand}</span>
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <History className="w-3 h-3"/> Lifecycle
+                    </h4>
+                    <div className="text-xs text-slate-500 space-y-1">
+                        <p>Registered on: {new Date(viewingDevice.createdAt).toLocaleString()}</p>
+                        <p>Last activity: {new Date(viewingDevice.updatedAt).toLocaleString()}</p>
+                    </div>
+                </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Device?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the unit with this IMEI from active inventory. This action is permanent.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive hover:bg-destructive/90">
+              Delete Device
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingDevice} onOpenChange={(open) => !open && setEditingDevice(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Device</DialogTitle>
+            <DialogDescription>Update serial number or assigned model.</DialogDescription>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 pt-4">
+              <FormField
+                control={editForm.control}
+                name="modelId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Model</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a model" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {models.map(model => (
+                          <SelectItem key={model.id} value={model.id}>
+                            {model.brand} {model.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="imei"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>IMEI</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="serialNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Serial Number</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button type="submit" className="w-full mt-2">Save Changes</Button>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
-  );
+  )
 }
+
+
+

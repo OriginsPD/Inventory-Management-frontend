@@ -41,13 +41,13 @@ export default function ReplacementHistoryPage() {
     <div className="p-6">
       <h1 className="text-3xl font-bold mb-6">Device Replacement History</h1>
 
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+      <div className="bg-card p-6 rounded-lg shadow-sm border border-border">
         {replacements.length === 0 ? (
           <p className="text-gray-600">No device replacement records found.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-muted">
                 <tr>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Replacement ID
@@ -69,10 +69,10 @@ export default function ReplacementHistoryPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-card divide-y divide-gray-200">
                 {replacements.map((replacement) => (
                   <tr key={replacement.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{replacement.id}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">{replacement.id}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getDeviceImei(replacement.oldDeviceId)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{getDeviceImei(replacement.newDeviceId)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{replacement.reason}</td>
@@ -88,3 +88,6 @@ export default function ReplacementHistoryPage() {
     </div>
   );
 }
+
+
+
