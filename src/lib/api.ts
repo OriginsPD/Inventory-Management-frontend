@@ -13,12 +13,12 @@ import { logger } from '@/lib/logger';
 
 import { authClient } from './auth-client';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:3000';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:3000';
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ message: 'An unknown error occurred' }));
-    const errorMessage = errorData.message || response.statusText;
+    const errorMessage = errorData.error || errorData.message || response.statusText;
     
     logger.error({
       msg: 'API Request Failed',
@@ -332,17 +332,99 @@ export const fetchDispatches = async (): Promise<Dispatch[]> => {
 
 
 
+export const fetchDispatchItems = async (id: string): Promise<Device[]> => {
+
+  const response = await authenticatedFetch(`${API_BASE_URL}/dispatches/${id}/items`);
+
+  return handleResponse(response);
+
+};
+
+
+
 export const createDispatch = async (data: CreateDispatchDto): Promise<Dispatch> => {
+
+
 
   const response = await authenticatedFetch(`${API_BASE_URL}/dispatches`, {
 
+
+
     method: 'POST',
+
+
 
     body: JSON.stringify(data),
 
+
+
   });
 
+
+
   return handleResponse(response);
+
+
+
+};
+
+
+
+
+
+
+
+export const updateDispatch = async (id: string, data: any): Promise<Dispatch> => {
+
+
+
+  const response = await authenticatedFetch(`${API_BASE_URL}/dispatches/${id}`, {
+
+
+
+    method: 'PATCH',
+
+
+
+    body: JSON.stringify(data),
+
+
+
+  });
+
+
+
+  return handleResponse(response);
+
+
+
+};
+
+
+
+
+
+
+
+export const deleteDispatch = async (id: string): Promise<{ message: string }> => {
+
+
+
+  const response = await authenticatedFetch(`${API_BASE_URL}/dispatches/${id}`, {
+
+
+
+    method: 'DELETE',
+
+
+
+  });
+
+
+
+  return handleResponse(response);
+
+
 
 };
 

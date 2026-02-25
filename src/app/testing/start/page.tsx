@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { Activity, ClipboardCheck, User, ShieldCheck } from "lucide-react"
+import { Activity, ClipboardCheck, User, ShieldCheck, Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -33,6 +33,8 @@ import {
 import { fetchDevices, startDeviceTest } from "@/lib/api"
 import { Device } from "@/types/devices"
 import { useToast } from "@/hooks/use-toast"
+import { Skeleton } from "@/components/ui/skeleton"
+import { playBeep } from "@/lib/utils"
 
 const formSchema = z.object({
   deviceId: z.string().min(1, { message: "Please select a device." }),
@@ -43,6 +45,8 @@ const formSchema = z.object({
 export default function StartTestPage() {
   const [eligibleDevices, setEligibleDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(true)
+  const [hardwareScanValue, setHardwareScanValue] = useState("")
+  const hardwareInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -68,6 +72,30 @@ export default function StartTestPage() {
     loadData()
   }, [toast])
 
+  const handleHardwareScan = () => {
+    let sanitized = hardwareScanValue.trim();
+    if (sanitized.startsWith("'")) {
+        sanitized = sanitized.substring(1);
+    }
+    if (!sanitized) return;
+
+    const device = eligibleDevices.find(d => d.identifier.toLowerCase() === sanitized.toLowerCase())
+    
+    if (device) {
+        playBeep()
+        form.setValue("deviceId", device.id)
+        toast({ 
+            title: "Device Identified", 
+            description: `Ready to test asset: ${device.identifier}`,
+            className: "bg-primary text-primary-foreground font-bold" 
+        })
+    } else {
+        toast({ title: "Not Found", description: `Asset ${sanitized} not found or not eligible for testing.`, variant: "destructive" })
+    }
+    setHardwareScanValue("")
+    setTimeout(() => hardwareInputRef.current?.focus(), 10)
+  }
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       await startDeviceTest(values as any)
@@ -81,7 +109,15 @@ export default function StartTestPage() {
     }
   }
 
-  if (loading) return <div className="p-8 text-center animate-pulse text-zinc-500 uppercase tracking-widest font-bold text-xs">Initializing Quality Module...</div>
+  if (loading) return (
+    <div className="max-w-3xl mx-auto space-y-8">
+        <div className="space-y-3">
+            <Skeleton className="h-10 w-[250px]" />
+            <Skeleton className="h-5 w-[400px]" />
+        </div>
+        <Skeleton className="h-[450px] w-full rounded-2xl" />
+    </div>
+  )
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -100,6 +136,23 @@ export default function StartTestPage() {
               <CardDescription>Assign a unit to a technician for assessment.</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
+              <div className="mb-6 p-4 bg-primary/5 border border-primary/10 rounded-xl space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Hardware Scanner</label>
+                  <div className="flex gap-2">
+                      <Input 
+                          ref={hardwareInputRef}
+                          placeholder="Scan IMEI for instant selection..." 
+                          className="h-10 border-border bg-card font-mono text-xs focus:ring-2 focus:ring-primary/50"
+                          value={hardwareScanValue}
+                          onChange={(e) => setHardwareScanValue(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleHardwareScan()}
+                      />
+                      <Button size="icon" variant="outline" className="shrink-0 h-10 w-10 border-border" onClick={handleHardwareScan}>
+                          <Plus className="h-4 w-4" />
+                      </Button>
+                  </div>
+              </div>
+
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
                   <FormField
@@ -107,8 +160,8 @@ export default function StartTestPage() {
                     name="deviceId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Select Device</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormLabel>Manual Selection</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                           <FormControl>
                             <SelectTrigger className="border-border">
                               <SelectValue placeholder="Select by IMEI" />
@@ -117,7 +170,7 @@ export default function StartTestPage() {
                           <SelectContent>
                             {eligibleDevices.map(device => (
                               <SelectItem key={device.id} value={device.id}>
-                                {device.imei} ({(device as any).modelName})
+                                {device.identifier} ({(device as any).modelName})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -191,7 +244,7 @@ export default function StartTestPage() {
             </Card>
 
             <div className="p-4 rounded-xl border border-border flex items-center gap-3 bg-card">
-                <div className="w-10 h-10 rounded-full bg-zinc-100 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
                     <User className="w-5 h-5 text-zinc-400" />
                 </div>
                 <div>

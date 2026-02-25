@@ -4,12 +4,37 @@ import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { Plus, Package, Trash2, Edit, Eye, Calendar, Tag, Info } from "lucide-react"
+import { 
+    Plus, 
+    Package, 
+    Trash2, 
+    Edit, 
+    Eye, 
+    Calendar, 
+    Tag, 
+    Info, 
+    Search, 
+    Filter, 
+    ChevronDown 
+} from "lucide-react"
+
+import {
+  ColumnDef,
+  ColumnFiltersState,
+  SortingState,
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from "@tanstack/react-table"
 
 import { Button } from "@/components/ui/button"
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -47,10 +72,21 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { fetchDeviceModels, createDeviceModel, deleteDeviceModel, updateDeviceModel } from "@/lib/api"
 import { DeviceModel } from "@/types/device-models"
 import { useToast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
+
+import { Skeleton } from "@/components/ui/skeleton"
 
 const formSchema = z.object({
   name: z.string().min(2, {
@@ -60,6 +96,8 @@ const formSchema = z.object({
     message: "Brand must be at least 2 characters.",
   }),
   category: z.string().optional(),
+  assetType: z.enum(['TRACKER', 'SIM', 'PERIPHERAL']),
+  minStock: z.number().min(0, { message: "Minimum stock cannot be negative." }),
 })
 
 export default function DeviceModelsPage() {
@@ -68,9 +106,15 @@ export default function DeviceModelsPage() {
   const { toast } = useToast()
   
   // Modal States
+  const [isAddOpen, setIsAddOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [editingModel, setEditingModel] = useState<DeviceModel | null>(null)
   const [viewingModel, setViewingModel] = useState<DeviceModel | null>(null)
+
+  // Table State
+  const [sorting, setSorting] = useState<SortingState>([])
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [rowSelection, setRowSelection] = useState({})
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -78,6 +122,8 @@ export default function DeviceModelsPage() {
       name: "",
       brand: "",
       category: "",
+      assetType: "TRACKER",
+      minStock: 0,
     },
   })
 
@@ -95,6 +141,8 @@ export default function DeviceModelsPage() {
         name: editingModel.name,
         brand: editingModel.brand,
         category: editingModel.category || "",
+        assetType: editingModel.assetType,
+        minStock: editingModel.minStock || 0,
       })
     }
   }, [editingModel, editForm])
@@ -116,9 +164,10 @@ export default function DeviceModelsPage() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
-      const created = await createDeviceModel(values)
+      const created = await createDeviceModel(values as any)
       setDeviceModels((prev) => [...prev, created])
       form.reset()
+      setIsAddOpen(false)
       toast({
         title: "Success",
         description: "Device model created successfully.",
@@ -135,7 +184,7 @@ export default function DeviceModelsPage() {
   async function onEditSubmit(values: z.infer<typeof formSchema>) {
     if (!editingModel) return
     try {
-      const updated = await updateDeviceModel(editingModel.id, values)
+      const updated = await updateDeviceModel(editingModel.id, values as any)
       setDeviceModels((prev) => prev.map(m => m.id === updated.id ? updated : m))
       setEditingModel(null)
       toast({
@@ -171,7 +220,133 @@ export default function DeviceModelsPage() {
     }
   }
 
-  if (loading) return <div className="p-8 text-center">Loading device models...</div>
+  const columns: ColumnDef<DeviceModel>[] = [
+    {
+      accessorKey: "name",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            className="p-0 hover:bg-transparent text-[10px] font-bold uppercase tracking-widest text-zinc-500"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Model Name
+            <ChevronDown className="ml-2 h-3 w-3" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => <div className="font-bold text-foreground text-sm">{row.getValue("name")}</div>,
+    },
+    {
+      accessorKey: "brand",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            className="p-0 hover:bg-transparent text-[10px] font-bold uppercase tracking-widest text-zinc-500"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Manufacturer
+            <ChevronDown className="ml-2 h-3 w-3" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => <div className="text-zinc-500 text-sm">{row.getValue("brand")}</div>,
+    },
+    {
+      accessorKey: "assetType",
+      header: "Classification",
+      cell: ({ row }) => {
+        const type = row.getValue("assetType") as string
+        return (
+            <span className={cn(
+                "px-2 py-0.5 rounded text-[10px] font-black tracking-tighter uppercase border",
+                type === 'TRACKER' ? "bg-blue-50 text-blue-600 border-blue-200" :
+                type === 'SIM' ? "bg-amber-50 text-amber-600 border-amber-200" :
+                "bg-zinc-100 text-zinc-500 border-zinc-200"
+            )}>
+                {type}
+            </span>
+        )
+      }
+    },
+    {
+      accessorKey: "category",
+      header: "Category",
+      cell: ({ row }) => <div className="text-zinc-400 text-xs">{row.getValue("category") || "General"}</div>,
+    },
+    {
+      id: "actions",
+      cell: ({ row }) => {
+        const model = row.original
+        return (
+          <div className="flex justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setViewingModel(model)}
+              className="text-zinc-400 hover:text-primary h-8 w-8"
+            >
+              <Eye className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setEditingModel(model)}
+              className="text-zinc-400 hover:text-primary h-8 w-8"
+            >
+              <Edit className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setDeleteId(model.id)}
+              className="text-zinc-400 hover:text-destructive h-8 w-8"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        )
+      },
+    },
+  ]
+
+  const table = useReactTable({
+    data: deviceModels,
+    columns,
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    onRowSelectionChange: setRowSelection,
+    state: {
+      sorting,
+      columnFilters,
+      rowSelection,
+    },
+    initialState: {
+        pagination: {
+            pageSize: 5
+        }
+    }
+  })
+
+  if (loading) return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div className="space-y-2">
+          <Skeleton className="h-10 w-[200px]" />
+          <Skeleton className="h-4 w-[300px]" />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Skeleton className="h-[400px] w-full" />
+        <Skeleton className="lg:col-span-2 h-[500px] w-full" />
+      </div>
+    </div>
+  )
 
   return (
     <div className="space-y-6">
@@ -187,124 +362,212 @@ export default function DeviceModelsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-1 h-fit border-none shadow-sm">
           <CardHeader>
-            <CardTitle className="text-xl flex items-center gap-2">
-              <Plus className="w-5 h-5 text-blue-600" /> Add New Model
+            <CardTitle className="text-xl flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Plus className="w-5 h-5 text-primary" /> New Model
+              </div>
+              <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+                <DialogTrigger asChild>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white">
+                        <Plus className="h-4 w-4" />
+                    </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px] bg-card border-border">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-bold">Add New Model</DialogTitle>
+                        <DialogDescription>Create a new device model definition.</DialogDescription>
+                    </DialogHeader>
+                    <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+                        <FormField
+                        control={form.control}
+                        name="name"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Model Name</FormLabel>
+                            <FormControl>
+                                <Input placeholder="iPhone 15 Pro" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                        <FormField
+                        control={form.control}
+                        name="brand"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Brand</FormLabel>
+                            <FormControl>
+                                <Input placeholder="Apple" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                        <FormField
+                        control={form.control}
+                        name="assetType"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Asset Type</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                <SelectTrigger className="bg-muted/10">
+                                    <SelectValue placeholder="Select type" />
+                                </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                <SelectItem value="TRACKER">TRACKER (IMEI)</SelectItem>
+                                <SelectItem value="SIM">SIM CARD (ICCID)</SelectItem>
+                                <SelectItem value="PERIPHERAL">PERIPHERAL (SN)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                        <FormField
+                        control={form.control}
+                        name="category"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Category</FormLabel>
+                            <FormControl>
+                                <Input placeholder="Smartphone" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                        <FormField
+                        control={form.control}
+                        name="minStock"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Minimum Stock Threshold</FormLabel>
+                            <FormControl>
+                                <Input 
+                                    type="number" 
+                                    placeholder="10" 
+                                    {...field} 
+                                    onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
+                                />
+                            </FormControl>
+                            <FormDescription className="text-[10px]">
+                                The system will alert when stock levels drop below this number.
+                            </FormDescription>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                        <Button type="submit" className="w-full">
+                        Create Model
+                        </Button>
+                    </form>
+                    </Form>
+                </DialogContent>
+              </Dialog>
             </CardTitle>
-            <CardDescription>Create a new device model definition.</CardDescription>
+            <CardDescription>Click plus to define a new asset type.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Model Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="iPhone 15 Pro" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="brand"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Brand</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Apple" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Category</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Smartphone" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button type="submit" className="w-full">
-                  Create Model
-                </Button>
-              </form>
-            </Form>
+          <CardContent className="hidden lg:block">
+              <div className="p-4 bg-muted/20 border border-dashed border-border rounded-xl">
+                  <p className="text-xs text-zinc-500 leading-relaxed italic">
+                      "Model definitions act as the blueprints for individual assets. Ensure type and thresholds are accurate for system heuristics."
+                  </p>
+              </div>
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2 border-none shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-xl flex items-center gap-2">
-              <Package className="w-5 h-5 text-slate-600" /> Existing Models
-            </CardTitle>
+        {/* Advanced Data Table */}
+        <Card className="lg:col-span-2 border-border shadow-md bg-card overflow-hidden flex flex-col h-[600px]">
+          <CardHeader className="bg-muted/20 border-b border-border py-4">
+            <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                    <Package className="w-4 h-4 text-primary" /> Model Definitions
+                </CardTitle>
+                <div className="relative w-[200px]">
+                    <Search className="absolute left-2.5 top-2.5 h-3 w-3 text-zinc-400" />
+                    <Input
+                        placeholder="Filter models..."
+                        value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
+                        onChange={(event) =>
+                            table.getColumn("name")?.setFilterValue(event.target.value)
+                        }
+                        className="pl-8 h-8 text-xs bg-card border-border"
+                    />
+                </div>
+            </div>
           </CardHeader>
-          <CardContent>
+          
+          <div className="flex-1 overflow-auto">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Brand</TableHead>
-                  <TableHead className="hidden md:table-cell">Category</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
+              <TableHeader className="bg-muted/50 border-b border-border sticky top-0 z-10">
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id} className="hover:bg-transparent border-none">
+                    {headerGroup.headers.map((header) => (
+                      <TableHead key={header.id} className="h-10 py-2">
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                ))}
               </TableHeader>
               <TableBody>
-                {deviceModels.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center text-muted-foreground italic">
-                      No models found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  deviceModels.map((model) => (
-                    <TableRow key={model.id}>
-                      <TableCell className="font-medium text-foreground">{model.name}</TableCell>
-                      <TableCell>{model.brand}</TableCell>
-                      <TableCell className="hidden md:table-cell">{model.category || "N/A"}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setViewingModel(model)}
-                            className="text-slate-400 hover:text-blue-600"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setEditingModel(model)}
-                            className="text-slate-400 hover:text-blue-600"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setDeleteId(model.id)}
-                            className="text-slate-400 hover:text-destructive"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+                {table.getRowModel().rows?.length ? (
+                  table.getRowModel().rows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      data-state={row.getIsSelected() && "selected"}
+                      className="border-border/40 hover:bg-muted/30 transition-colors"
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id} className="py-3">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
                     </TableRow>
                   ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={columns.length} className="h-64 text-center">
+                        <div className="flex flex-col items-center gap-3 opacity-40 italic text-zinc-500">
+                            <Package className="h-12 w-12" />
+                            <p>No models definitions found.</p>
+                        </div>
+                    </TableCell>
+                  </TableRow>
                 )}
               </TableBody>
             </Table>
-          </CardContent>
+          </div>
+
+          <div className="p-2 border-t border-border bg-muted/10 flex items-center justify-end space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+              className="h-7 text-xs"
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+              className="h-7 text-xs"
+            >
+              Next
+            </Button>
+          </div>
         </Card>
       </div>
 
@@ -313,7 +576,7 @@ export default function DeviceModelsPage() {
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-                <Info className="w-5 h-5 text-blue-600"/> Model Details
+                <Info className="w-5 h-5 text-primary"/> Model Details
             </DialogTitle>
             <DialogDescription>Full technical specification for this device type.</DialogDescription>
           </DialogHeader>
@@ -321,30 +584,30 @@ export default function DeviceModelsPage() {
             <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                     <div className="p-3 bg-muted rounded-lg">
-                        <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Brand</span>
+                        <span className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Brand</span>
                         <span className="font-semibold text-foreground">{viewingModel.brand}</span>
                     </div>
                     <div className="p-3 bg-muted rounded-lg">
-                        <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Model</span>
+                        <span className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Model</span>
                         <span className="font-semibold text-foreground">{viewingModel.name}</span>
                     </div>
                 </div>
                 <div className="p-3 bg-muted rounded-lg flex items-center justify-between">
                     <div>
-                        <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Category</span>
-                        <span className="text-sm">{viewingModel.category || 'General'}</span>
+                        <span className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Classification</span>
+                        <span className="text-sm font-bold text-primary">{viewingModel.assetType}</span>
                     </div>
-                    <Tag className="w-4 h-4 text-slate-400"/>
+                    <Tag className="w-4 h-4 text-primary opacity-50"/>
                 </div>
                 <div className="p-3 border border-border rounded-lg space-y-2">
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <div className="flex items-center gap-2 text-xs text-zinc-500">
                         <Calendar className="w-3 h-3"/> Created: {new Date(viewingModel.createdAt).toLocaleString()}
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <div className="flex items-center gap-2 text-xs text-zinc-500">
                         <Calendar className="w-3 h-3"/> Last Updated: {new Date(viewingModel.updatedAt).toLocaleString()}
                     </div>
                 </div>
-                <div className="text-[10px] text-slate-300 break-all font-mono">
+                <div className="text-[10px] text-zinc-300 break-all font-mono">
                     UUID: {viewingModel.id}
                 </div>
             </div>
@@ -407,12 +670,51 @@ export default function DeviceModelsPage() {
               />
               <FormField
                 control={editForm.control}
+                name="assetType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Asset Type</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="bg-muted/10">
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="TRACKER">TRACKER (IMEI)</SelectItem>
+                        <SelectItem value="SIM">SIM CARD (ICCID)</SelectItem>
+                        <SelectItem value="PERIPHERAL">PERIPHERAL (SN)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
                 name="category"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Category</FormLabel>
                     <FormControl>
                       <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="minStock"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Minimum Stock Threshold</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        {...field} 
+                        onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -426,6 +728,3 @@ export default function DeviceModelsPage() {
     </div>
   )
 }
-
-
-

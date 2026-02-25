@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { ClipboardCheck, CheckCircle2, XCircle, FileText } from "lucide-react"
+import { ClipboardCheck, CheckCircle2, XCircle, FileText, Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -15,6 +15,9 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
+import {
+  Input,
+} from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -33,11 +36,13 @@ import { fetchDevices, fetchDeviceTests, completeDeviceTest } from "@/lib/api"
 import { DeviceTest } from "@/types/device-testing"
 import { Device } from "@/types/devices"
 import { useToast } from "@/hooks/use-toast"
+import { cn, playBeep } from "@/lib/utils"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const formSchema = z.object({
   testId: z.string().min(1, { message: "Please select a pending test." }),
   result: z.enum(["PASS", "FAIL"], {
-    errorMap: () => ({ message: "Result is required." }),
+    message: "Result is required.",
   }),
   notes: z.string().optional(),
 })
@@ -46,6 +51,8 @@ export default function CompleteTestPage() {
   const [pendingTests, setPendingTests] = useState<DeviceTest[]>([])
   const [testingDevices, setTestingDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(true)
+  const [hardwareScanValue, setHardwareScanValue] = useState("")
+  const hardwareInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -80,6 +87,35 @@ export default function CompleteTestPage() {
     loadData()
   }, [toast])
 
+  const handleHardwareScan = () => {
+    let sanitized = hardwareScanValue.trim();
+    if (sanitized.startsWith("'")) {
+        sanitized = sanitized.substring(1);
+    }
+    if (!sanitized) return;
+
+    const device = testingDevices.find(d => d.identifier.toLowerCase() === sanitized.toLowerCase())
+    
+    if (device) {
+        const test = pendingTests.find(t => t.deviceId === device.id)
+        if (test) {
+            playBeep()
+            form.setValue("testId", test.id)
+            toast({ 
+                title: "Session Located", 
+                description: `Completing QC for asset: ${device.identifier}`,
+                className: "bg-primary text-primary-foreground font-bold" 
+            })
+        } else {
+            toast({ title: "No Pending Test", description: `Asset ${device.identifier} is in testing but has no active session.`, variant: "destructive" })
+        }
+    } else {
+        toast({ title: "Not Found", description: `Asset ${sanitized} not found in testing state.`, variant: "destructive" })
+    }
+    setHardwareScanValue("")
+    setTimeout(() => hardwareInputRef.current?.focus(), 10)
+  }
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       await completeDeviceTest(values as any)
@@ -102,12 +138,20 @@ export default function CompleteTestPage() {
     }
   }
 
-  const getDeviceImei = (deviceId: string) => {
+  const getDeviceIdentifier = (deviceId: string) => {
     const device = testingDevices.find(d => d.id === deviceId)
-    return device ? device.imei : 'Unknown'
+    return device ? device.identifier : 'Unknown'
   }
 
-  if (loading) return <div className="p-8 text-center animate-pulse">Accessing laboratory records...</div>
+  if (loading) return (
+    <div className="max-w-3xl mx-auto space-y-8">
+        <div className="space-y-3">
+            <Skeleton className="h-10 w-[250px]" />
+            <Skeleton className="h-5 w-[400px]" />
+        </div>
+        <Skeleton className="h-[500px] w-full rounded-2xl" />
+    </div>
+  )
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -124,6 +168,23 @@ export default function CompleteTestPage() {
           <CardDescription>Finalize the assessment for an active QC session.</CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
+          <div className="mb-6 p-4 bg-primary/5 border border-primary/10 rounded-xl space-y-2">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Hardware Scanner</label>
+              <div className="flex gap-2">
+                  <Input 
+                      ref={hardwareInputRef}
+                      placeholder="Scan IMEI to identify QC session..." 
+                      className="h-10 border-border bg-card font-mono text-xs focus:ring-2 focus:ring-primary/50"
+                      value={hardwareScanValue}
+                      onChange={(e) => setHardwareScanValue(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleHardwareScan()}
+                  />
+                  <Button size="icon" variant="outline" className="shrink-0 h-10 w-10 border-border" onClick={handleHardwareScan}>
+                      <Plus className="h-4 w-4" />
+                  </Button>
+              </div>
+          </div>
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <FormField
@@ -131,17 +192,17 @@ export default function CompleteTestPage() {
                 name="testId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Select Active Test Session</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormLabel>Manual Session Selection</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="border-border h-12">
-                          <SelectValue placeholder="Identify session by asset IMEI" />
+                          <SelectValue placeholder="Identify session by Asset Identifier" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         {pendingTests.map(test => (
                           <SelectItem key={test.id} value={test.id}>
-                            IMEI: {getDeviceImei(test.deviceId)} — Technician: {test.handedTo}
+                            IMEI: {getDeviceIdentifier(test.deviceId)} — Technician: {test.handedTo}
                           </SelectItem>
                         ))}
                       </SelectContent>

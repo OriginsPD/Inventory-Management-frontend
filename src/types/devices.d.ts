@@ -1,37 +1,53 @@
 // frontend/src/types/devices.d.ts
 
-import { DeviceModel } from "./device-models"; // Assuming DeviceModel is already defined
+import { DeviceModel } from "./device-models";
 
-export type DeviceStatus = 'IN_STOCK' | 'DISPATCHED' | 'TESTING' | 'DAMAGED' | 'REPLACED' | 'PROMOTIONAL';
+export type DeviceStatus = 'IN_STOCK' | 'DISPATCHED' | 'TESTING' | 'DAMAGED' | 'REPLACED' | 'PROMOTIONAL' | 'RMA';
 
 export type Device = {
   id: string;
-  imei: string;
-  serialNumber?: string | null;
+  identifier: string;
   modelId: string;
   status: DeviceStatus;
+  carrier?: string;
+  activationDate?: string;
+  planExpiryDate?: string;
+  firmwareVersion?: string;
+  hardwareRevision?: string;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
-  // Potentially include the full DeviceModel object here if desired for display
-  // deviceModel?: DeviceModel;
+  modelName?: string;
+  brand?: string;
 };
 
 export type CreateDeviceDto = {
-  imei: string;
-  serialNumber?: string;
+  identifier: string;
   modelId: string;
   status?: DeviceStatus;
+  carrier?: string;
+  activationDate?: string;
+  planExpiryDate?: string;
+  firmwareVersion?: string;
+  hardwareRevision?: string;
 };
 
 export type UpdateDeviceDto = {
-  imei?: string;
-  serialNumber?: string;
+  identifier?: string;
   modelId?: string;
   status?: DeviceStatus;
+  carrier?: string;
+  activationDate?: string;
+  planExpiryDate?: string;
+  firmwareVersion?: string;
+  hardwareRevision?: string;
 };
 
 export type StockRefillDto = {
   modelId: string;
-  quantity: number;
+  quantity?: number;
+  identifiers?: string[];
+  carrier?: string;
+  activationDate?: string;
+  planExpiryDate?: string;
 };

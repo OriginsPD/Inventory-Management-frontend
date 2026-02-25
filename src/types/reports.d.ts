@@ -4,6 +4,7 @@ export type InventoryByModelReport = {
   modelId: string;
   modelName: string;
   brand: string;
+  minStock: number;
   totalStock: number;
 };
 
@@ -19,6 +20,8 @@ export type DispatchReportSummary = {
   location?: string | null;
   deviceId: string;
   customerId: string;
+  signOffPath?: string | null;
+  items?: string | null;
 };
 
 export type DamageReportSummary = {

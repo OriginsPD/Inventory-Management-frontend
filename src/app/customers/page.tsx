@@ -4,7 +4,32 @@ import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { UserPlus, Mail, Phone, Trash2, Edit, Eye, User, Fingerprint, Calendar, Briefcase } from "lucide-react"
+import { 
+    UserPlus, 
+    Mail, 
+    Phone, 
+    Trash2, 
+    Edit, 
+    Eye, 
+    User, 
+    Fingerprint, 
+    Calendar, 
+    Briefcase,
+    Search,
+    ChevronDown
+} from "lucide-react"
+
+import {
+  ColumnDef,
+  ColumnFiltersState,
+  SortingState,
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from "@tanstack/react-table"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -19,6 +44,7 @@ import { Input } from "@/components/ui/input"
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -51,6 +77,9 @@ import {
 import { fetchCustomers, createCustomer, deleteCustomer, updateCustomer } from "@/lib/api"
 import { Customer } from "@/types/customers"
 import { useToast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
+
+import { Skeleton } from "@/components/ui/skeleton"
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -63,6 +92,11 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true)
   const { toast } = useToast()
   
+  // Table State
+  const [sorting, setSorting] = useState<SortingState>([])
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [rowSelection, setRowSelection] = useState({})
+
   // Modal states
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
@@ -140,25 +174,158 @@ export default function CustomersPage() {
     }
   }
 
-  if (loading) return <div className="p-8 text-center animate-pulse">Loading customers...</div>
+  const columns: ColumnDef<Customer>[] = [
+    {
+      accessorKey: "name",
+      header: ({ column }) => {
+        return (
+          <Button
+            variant="ghost"
+            className="p-0 hover:bg-transparent text-[10px] font-bold uppercase tracking-widest text-zinc-500"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Customer
+            <ChevronDown className="ml-2 h-3 w-3" />
+          </Button>
+        )
+      },
+      cell: ({ row }) => (
+        <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs">
+                {(row.getValue("name") as string).charAt(0).toUpperCase()}
+            </div>
+            <span className="font-bold text-foreground">{row.getValue("name")}</span>
+        </div>
+      ),
+    },
+    {
+      id: "contact",
+      header: () => <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Contact Details</span>,
+      cell: ({ row }) => {
+        const email = row.original.email
+        const phone = row.original.phone
+        return (
+            <div className="space-y-1">
+                {email && (
+                    <div className="flex items-center text-xs text-zinc-500">
+                        <Mail className="w-3 h-3 mr-1.5 opacity-70 text-primary" /> {email}
+                    </div>
+                )}
+                {phone && (
+                    <div className="flex items-center text-xs text-zinc-500">
+                        <Phone className="w-3 h-3 mr-1.5 opacity-70 text-primary" /> {phone}
+                    </div>
+                )}
+            </div>
+        )
+      }
+    },
+    {
+      accessorKey: "createdAt",
+      header: ({ column }) => (
+        <Button
+            variant="ghost"
+            className="p-0 hover:bg-transparent text-[10px] font-bold uppercase tracking-widest text-zinc-500"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+            Joined
+            <ChevronDown className="ml-2 h-3 w-3" />
+        </Button>
+      ),
+      cell: ({ row }) => <div className="text-zinc-400 text-xs">{new Date(row.getValue("createdAt")).toLocaleDateString()}</div>,
+    },
+    {
+      id: "actions",
+      cell: ({ row }) => {
+        const customer = row.original
+        return (
+          <div className="flex justify-end gap-1">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setViewingCustomer(customer)}
+              className="text-zinc-400 hover:text-primary h-8 w-8"
+            >
+              <Eye className="w-4 h-4" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setEditingCustomer(customer)}
+              className="text-zinc-400 hover:text-primary h-8 w-8"
+            >
+              <Edit className="w-4 h-4" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setDeleteId(customer.id)}
+              className="text-zinc-400 hover:text-destructive h-8 w-8"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        )
+      },
+    },
+  ]
+
+  const table = useReactTable({
+    data: customers,
+    columns,
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    onRowSelectionChange: setRowSelection,
+    state: {
+      sorting,
+      columnFilters,
+      rowSelection,
+    },
+    initialState: {
+        pagination: {
+            pageSize: 10
+        }
+    }
+  })
+
+  if (loading) return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div className="space-y-2">
+          <Skeleton className="h-10 w-[200px]" />
+          <Skeleton className="h-4 w-[300px]" />
+        </div>
+        <Skeleton className="h-10 w-[150px]" />
+      </div>
+      <Card className="border-border">
+        <div className="p-0">
+          {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
+        </div>
+      </Card>
+    </div>
+  )
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Customers</h1>
-          <p className="text-muted-foreground text-slate-500">Manage your client base and their contact information.</p>
+          <p className="text-muted-foreground text-zinc-500">Manage your client base and their contact information.</p>
         </div>
         
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700 shadow-md">
+            <Button variant="default" className="shadow-md font-bold">
               <UserPlus className="w-4 h-4 mr-2" /> Add Customer
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[425px] bg-card border-border">
             <DialogHeader>
-              <DialogTitle>New Customer</DialogTitle>
+              <DialogTitle className="text-xl font-bold">New Customer</DialogTitle>
               <DialogDescription>Add a new individual or business to the database.</DialogDescription>
             </DialogHeader>
             <Form {...form}>
@@ -168,9 +335,9 @@ export default function CustomersPage() {
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Full Name / Company</FormLabel>
+                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Full Name / Company</FormLabel>
                       <FormControl>
-                        <Input placeholder="Acme Corp" {...field} />
+                        <Input placeholder="Acme Corp" className="bg-muted/30 border-border" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -181,9 +348,9 @@ export default function CustomersPage() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email Address</FormLabel>
+                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Email Address</FormLabel>
                       <FormControl>
-                        <Input placeholder="billing@acme.com" {...field} />
+                        <Input placeholder="billing@acme.com" className="bg-muted/30 border-border" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -194,150 +361,170 @@ export default function CustomersPage() {
                   name="phone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Phone Number</FormLabel>
+                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Phone Number</FormLabel>
                       <FormControl>
-                        <Input placeholder="+1 (555) 000-0000" {...field} />
+                        <Input placeholder="+1 (555) 000-0000" className="bg-muted/30 border-border" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full mt-2">Save Customer</Button>
+                <Button type="submit" className="w-full mt-4 h-11 font-bold">Save Customer</Button>
               </form>
             </Form>
           </DialogContent>
         </Dialog>
       </div>
 
-      <Card className="border-none shadow-sm overflow-hidden">
-        <CardContent className="p-0">
+      <Card className="border border-border shadow-md overflow-hidden bg-card flex flex-col h-[650px]">
+        <CardHeader className="bg-muted/30 border-b border-border py-4">
+            <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                    <Briefcase className="w-4 h-4 text-primary" /> Active Client Registry
+                </CardTitle>
+                <div className="relative w-[300px]">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" />
+                    <Input
+                        placeholder="Search by name..."
+                        value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
+                        onChange={(event) =>
+                            table.getColumn("name")?.setFilterValue(event.target.value)
+                        }
+                        className="pl-8 bg-card border-border h-9 text-sm"
+                    />
+                </div>
+            </div>
+        </CardHeader>
+        <div className="flex-1 overflow-auto">
           <Table>
-            <TableHeader className="bg-muted/50">
-              <TableRow>
-                <TableHead className="w-[300px] pl-6 font-semibold">Customer</TableHead>
-                <TableHead className="font-semibold">Contact Details</TableHead>
-                <TableHead className="text-right pr-6 font-semibold">Actions</TableHead>
-              </TableRow>
+            <TableHeader className="bg-muted/50 border-b border-border sticky top-0 z-10">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id} className="hover:bg-transparent border-none">
+                  {headerGroup.headers.map((header) => (
+                    <TableHead key={header.id} className="h-12 py-2">
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))}
             </TableHeader>
             <TableBody>
-              {customers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="h-32 text-center text-slate-400">
-                    No customers registered yet.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                customers.map((customer) => (
-                  <TableRow key={customer.id} className="hover:bg-muted transition-colors">
-                    <TableCell className="pl-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-slate-100 rounded-full flex items-center justify-center text-slate-600 font-bold text-sm">
-                          {customer.name.charAt(0).toUpperCase()}
-                        </div>
-                        <span className="font-medium text-foreground">{customer.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-4">
-                      <div className="space-y-1">
-                        {customer.email && (
-                          <div className="flex items-center text-xs text-slate-500">
-                            <Mail className="w-3 h-3 mr-1.5 opacity-70" /> {customer.email}
-                          </div>
-                        )}
-                        {customer.phone && (
-                          <div className="flex items-center text-xs text-slate-500">
-                            <Phone className="w-3 h-3 mr-1.5 opacity-70" /> {customer.phone}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right pr-6 py-4">
-                      <div className="flex justify-end gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => setViewingCustomer(customer)}
-                          className="text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => setEditingCustomer(customer)}
-                          className="text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => setDeleteId(customer.id)}
-                          className="text-slate-400 hover:text-red-600 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() && "selected"}
+                    className="border-border/40 hover:bg-muted/30 transition-colors"
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id} className="py-3">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
                   </TableRow>
                 ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="h-64 text-center">
+                      <div className="flex flex-col items-center gap-3 opacity-40 italic text-zinc-500">
+                          <User className="h-12 w-12" />
+                          <p>No customers found matching criteria.</p>
+                      </div>
+                  </TableCell>
+                </TableRow>
               )}
             </TableBody>
           </Table>
-        </CardContent>
+        </div>
+        <div className="p-4 border-t border-border bg-muted/10 flex items-center justify-between">
+            <div className="text-xs text-zinc-500">
+                Total Clients: <span className="font-bold text-foreground">{customers.length}</span>
+            </div>
+            <div className="flex items-center space-x-2">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => table.previousPage()}
+                    disabled={!table.getCanPreviousPage()}
+                    className="h-8 text-xs font-bold"
+                >
+                    Previous
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => table.nextPage()}
+                    disabled={!table.getCanNextPage()}
+                    className="h-8 text-xs font-bold"
+                >
+                    Next
+                </Button>
+            </div>
+        </div>
       </Card>
 
       {/* View Detail Modal */}
       <Dialog open={!!viewingCustomer} onOpenChange={(open) => !open && setViewingCustomer(null)}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="sm:max-w-[450px] bg-card border-border">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-                <Briefcase className="w-5 h-5 text-blue-600"/> Customer Profile
+            <DialogTitle className="flex items-center gap-2 text-2xl font-bold">
+                <Briefcase className="w-6 h-6 text-primary"/> Customer Profile
             </DialogTitle>
             <DialogDescription>Full contact and registration history.</DialogDescription>
           </DialogHeader>
           {viewingCustomer && (
             <div className="space-y-6 py-4">
-                <div className="flex items-center gap-4 p-4 bg-muted rounded-xl">
-                    <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white text-2xl font-bold">
+                <div className="flex items-center gap-4 p-4 bg-muted/30 border border-border rounded-2xl">
+                    <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-white text-3xl font-bold shadow-lg shadow-primary/20">
                         {viewingCustomer.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
                         <h3 className="text-xl font-bold text-foreground">{viewingCustomer.name}</h3>
-                        <p className="text-sm text-slate-500 flex items-center gap-1"><Fingerprint className="w-3 h-3"/> ID: {viewingCustomer.id.substring(0, 8)}</p>
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest flex items-center gap-1 mt-1">
+                            <Fingerprint className="w-3 h-3 text-primary"/> System ID: {viewingCustomer.id.substring(0, 8)}
+                        </p>
                     </div>
                 </div>
 
                 <div className="space-y-3">
-                    <div className="flex items-center gap-3 p-3 border rounded-lg">
-                        <Mail className="w-4 h-4 text-blue-500"/>
+                    <div className="flex items-center gap-3 p-4 bg-card border border-border rounded-xl">
+                        <div className="p-2 bg-primary/5 rounded-lg">
+                            <Mail className="w-4 h-4 text-primary"/>
+                        </div>
                         <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">Email</span>
-                            <span className="text-sm">{viewingCustomer.email || 'N/A'}</span>
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">Verified Email</span>
+                            <span className="text-sm font-medium text-foreground">{viewingCustomer.email || 'N/A'}</span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3 p-3 border rounded-lg">
-                        <Phone className="w-4 h-4 text-blue-500"/>
+                    <div className="flex items-center gap-3 p-4 bg-card border border-border rounded-xl">
+                        <div className="p-2 bg-primary/5 rounded-lg">
+                            <Phone className="w-4 h-4 text-primary"/>
+                        </div>
                         <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">Phone</span>
-                            <span className="text-sm">{viewingCustomer.phone || 'N/A'}</span>
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">Primary Contact</span>
+                            <span className="text-sm font-medium text-foreground">{viewingCustomer.phone || 'N/A'}</span>
                         </div>
                     </div>
                 </div>
 
-                <div className="p-4 bg-slate-900 rounded-xl text-white">
+                <div className="p-4 bg-muted/20 border border-dashed border-border rounded-2xl">
                     <div className="flex items-center justify-between mb-4">
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Metadata</h4>
-                        <Calendar className="w-4 h-4 text-slate-600"/>
+                        <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Chronological Metadata</h4>
+                        <Calendar className="w-4 h-4 text-zinc-400"/>
                     </div>
                     <div className="grid grid-cols-2 gap-4 text-xs">
-                        <div>
-                            <span className="text-slate-500 block mb-1">Created At</span>
-                            <span>{new Date(viewingCustomer.createdAt).toLocaleString()}</span>
+                        <div className="space-y-1">
+                            <span className="text-zinc-400 block text-[10px] uppercase font-bold">Created At</span>
+                            <span className="text-foreground font-mono">{new Date(viewingCustomer.createdAt).toLocaleDateString()}</span>
                         </div>
-                        <div>
-                            <span className="text-slate-500 block mb-1">Updated At</span>
-                            <span>{new Date(viewingCustomer.updatedAt).toLocaleString()}</span>
+                        <div className="space-y-1 text-right">
+                            <span className="text-zinc-400 block text-[10px] uppercase font-bold">Last Activity</span>
+                            <span className="text-foreground font-mono">{new Date(viewingCustomer.updatedAt).toLocaleDateString()}</span>
                         </div>
                     </div>
                 </div>
@@ -348,17 +535,17 @@ export default function CustomersPage() {
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-card border-border rounded-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Customer?</AlertDialogTitle>
+            <AlertDialogTitle className="text-xl font-bold">Purge Customer Record?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove this customer? This will also affect their history.
+              Are you sure you want to remove this customer? This action is immutable and will affect historical dispatch relations.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-destructive hover:bg-destructive/90">
-              Delete
+            <AlertDialogCancel className="rounded-xl font-bold">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-xl font-bold">
+              Execute Purge
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -366,10 +553,10 @@ export default function CustomersPage() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editingCustomer} onOpenChange={(open) => !open && setEditingCustomer(null)}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[425px] bg-card border-border">
           <DialogHeader>
-            <DialogTitle>Edit Customer</DialogTitle>
-            <DialogDescription>Update contact information.</DialogDescription>
+            <DialogTitle className="text-xl font-bold">Modify Information</DialogTitle>
+            <DialogDescription>Update contact parameters for this client entity.</DialogDescription>
           </DialogHeader>
           <Form {...editForm}>
             <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 pt-4">
@@ -378,9 +565,9 @@ export default function CustomersPage() {
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Full Name</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Full Name / Entity</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input {...field} className="bg-muted/30 border-border" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -391,9 +578,9 @@ export default function CustomersPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Contact Email</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input {...field} className="bg-muted/30 border-border" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -404,15 +591,15 @@ export default function CustomersPage() {
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone</FormLabel>
+                    <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Direct Phone</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input {...field} className="bg-muted/30 border-border" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full mt-2">Save Changes</Button>
+              <Button type="submit" className="w-full mt-4 h-11 font-bold">Commit Changes</Button>
             </form>
           </Form>
         </DialogContent>
@@ -420,6 +607,3 @@ export default function CustomersPage() {
     </div>
   )
 }
-
-
-

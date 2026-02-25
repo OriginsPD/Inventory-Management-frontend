@@ -12,7 +12,7 @@ import {
   BarChart, 
   Shield, 
   Users,
-  Layers
+  Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +20,7 @@ const Sidebar = () => {
   const pathname = usePathname();
 
   const navItems = [
-    { name: 'Dashboard', href: '/', icon: Home },
+    { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'Device Models', href: '/device-models', icon: Layers },
     { name: 'Devices', href: '/devices', icon: Package },
     { name: 'Customers', href: '/customers', icon: Users },
@@ -34,13 +34,13 @@ const Sidebar = () => {
   ];
 
   return (
-    <aside className="w-64 bg-zinc-950 text-zinc-400 h-screen fixed left-0 top-0 overflow-y-auto flex flex-col border-r border-zinc-800">
+    <aside className="w-64 bg-card text-zinc-600 h-screen fixed left-0 top-0 overflow-y-auto flex flex-col border-r border-border transition-colors duration-300">
       <div className="p-6">
-        <Link href="/" className="flex items-center gap-2 mb-10 px-2">
-          <div className="w-8 h-8 bg-zinc-100 rounded-lg flex items-center justify-center text-zinc-950">
+        <Link href="/" className="flex items-center gap-2 mb-10 px-2 group">
+          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-primary-foreground shadow-sm group-hover:scale-105 transition-transform">
             <Package size={20} />
           </div>
-          <span className="text-xl font-bold text-zinc-100 tracking-tight">IMS Pro</span>
+          <span className="text-xl font-bold text-foreground tracking-tight">IMS Pro</span>
         </Link>
         
         <nav className="space-y-1">
@@ -53,13 +53,13 @@ const Sidebar = () => {
                 className={cn(
                   "flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group",
                   isActive 
-                    ? "bg-zinc-800 text-zinc-100 shadow-sm" 
-                    : "hover:bg-zinc-900 hover:text-zinc-200"
+                    ? "bg-primary text-white shadow-md shadow-primary/20" 
+                    : "text-zinc-500 hover:bg-orange-50 hover:text-primary dark:hover:bg-primary/10"
                 )}
               >
                 <item.icon size={18} className={cn(
                   "transition-colors",
-                  isActive ? "text-zinc-100" : "text-zinc-500 group-hover:text-zinc-300"
+                  isActive ? "text-white" : "text-zinc-400 group-hover:text-primary"
                 )} />
                 <span className="text-sm font-medium">{item.name}</span>
               </Link>
@@ -68,12 +68,12 @@ const Sidebar = () => {
         </nav>
       </div>
 
-      <div className="mt-auto p-6 border-t border-zinc-900">
-        <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800/50">
+      <div className="mt-auto p-6 border-t border-border">
+        <div className="bg-muted/50 rounded-xl p-4 border border-border/50">
           <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mb-1">System Status</p>
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-zinc-400 rounded-full animate-pulse" />
-            <span className="text-xs text-zinc-400 font-medium">Internal Core Stable</span>
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+            <span className="text-xs text-zinc-500 font-medium">Internal Core Stable</span>
           </div>
         </div>
       </div>
@@ -82,6 +82,3 @@ const Sidebar = () => {
 };
 
 export default Sidebar;
-
-
-

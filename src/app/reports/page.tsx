@@ -31,7 +31,9 @@ import {
   Eye,
   Download,
   Search,
-  CheckCircle2
+  CheckCircle2,
+  FileText,
+  FileSpreadsheet
 } from "lucide-react"
 
 import {
@@ -61,6 +63,7 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
+import { Skeleton } from "@/components/ui/skeleton"
 import * as XLSX from 'xlsx'
 
 type ReportType = "inventory" | "status" | "dispatch" | "damage"
@@ -146,24 +149,66 @@ export default function ReportsPage() {
             Recipient: cust?.name || 'Unknown',
             Location: d.location || 'Central Warehouse',
             Dispatcher: d.dispatchedBy,
-            DeviceID: d.deviceId
+            Assets: d.items || 'Single Item',
+            Reference: d.signOffPath || 'N/A'
         };
     });
     exportToExcel(dataToExport, `Selected_Movement_Log_${new Date().getTime()}`);
   };
 
-  const handleExportAll = () => {
-    const dataToExport = dispatchReport.map(d => {
+  const handleMasterExport = () => {
+    // 1. Prepare Inventory Tab
+    const inventoryData = inventoryReport.map(item => ({
+        'Hardware Model': item.modelName,
+        'Brand': item.brand,
+        'Asset Type': allDevices.find(d => d.modelId === item.modelId)?.modelName ? // Fallback if needed
+                      allDevices.find(d => d.modelId === item.modelId)?.brand : 'Unknown', 
+        'Min Threshold': item.minStock,
+        'Actual Stock': item.totalStock,
+        'Status': item.totalStock <= item.minStock ? 'CRITICAL' : 'OPTIMAL'
+    }));
+
+    // 2. Prepare Movement Log Tab
+    const movementData = dispatchReport.map(d => {
         const cust = allCustomers.find(c => c.id === d.customerId);
         return {
-            Date: new Date(d.dispatchDate).toLocaleDateString(),
-            Recipient: cust?.name || 'Unknown',
-            Location: d.location || 'Central Warehouse',
-            Dispatcher: d.dispatchedBy,
-            DeviceID: d.deviceId
+            'Dispatch Date': new Date(d.dispatchDate).toLocaleDateString(),
+            'Recipient Name': cust?.name || 'Unknown',
+            'Facility Location': d.location || 'Central Warehouse',
+            'Dispatcher': d.dispatchedBy,
+            'Bundle Assets': d.items || 'Primary ID Only',
+            'Digital Reference': d.signOffPath || 'N/A'
         };
     });
-    exportToExcel(dataToExport, `Full_Movement_Log_${new Date().getTime()}`);
+
+    // 3. Prepare Anomaly Tab
+    const anomalyData = damageReport.map(dmg => {
+        const dev = allDevices.find(d => d.id === dmg.deviceId);
+        return {
+            'Report Date': new Date(dmg.reportedDate || "").toLocaleDateString(),
+            'Asset Identifier': dev?.identifier || 'Unknown',
+            'Issue Description': dmg.issueDescription,
+            'Logged By': dmg.reportedBy || 'System'
+        };
+    });
+
+    const wb = XLSX.utils.book_new();
+    
+    const wsInv = XLSX.utils.json_to_sheet(inventoryData);
+    XLSX.utils.book_append_sheet(wb, wsInv, "Inventory Summary");
+
+    const wsMov = XLSX.utils.json_to_sheet(movementData);
+    XLSX.utils.book_append_sheet(wb, wsMov, "Movement Logs");
+
+    const wsDmg = XLSX.utils.json_to_sheet(anomalyData);
+    XLSX.utils.book_append_sheet(wb, wsDmg, "Anomaly Reports");
+
+    XLSX.writeFile(wb, `Jamaica_Master_Dispatch_Digital_${new Date().getTime()}.xlsx`);
+    
+    toast({
+      title: "Master Export Complete",
+      description: "Generated multi-tab workbook for review.",
+    });
   };
 
   // Data Table Columns Configuration
@@ -260,8 +305,7 @@ export default function ReportsPage() {
           <Table>
             <TableHeader>
               <TableRow className="border-border">
-                <TableHead className="text-zinc-500 uppercase text-[10px] font-bold">IMEI</TableHead>
-                <TableHead className="text-zinc-500 uppercase text-[10px] font-bold">Serial</TableHead>
+                <TableHead className="text-zinc-500 uppercase text-[10px] font-bold">ID / Identifier</TableHead>
                 <TableHead className="text-zinc-500 uppercase text-[10px] font-bold">Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -270,10 +314,9 @@ export default function ReportsPage() {
                 .filter(d => d.modelId === selectedReport.data.modelId)
                 .map(device => (
                   <TableRow key={device.id} className="border-border/40">
-                    <TableCell className="font-mono text-xs">{device.imei}</TableCell>
-                    <TableCell className="text-xs">{device.serialNumber || 'N/A'}</TableCell>
+                    <TableCell className="font-mono text-xs">{device.identifier}</TableCell>
                     <TableCell>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-100 text-zinc-600 uppercase">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-muted text-zinc-600 uppercase">
                         {device.status.replace('_', ' ')}
                       </span>
                     </TableCell>
@@ -284,14 +327,13 @@ export default function ReportsPage() {
         )
       case "dispatch":
         const customer = allCustomers.find(c => c.id === selectedReport.data.customerId)
-        const device = allDevices.find(d => d.id === selectedReport.data.deviceId)
         return (
           <div className="space-y-6 pt-4">
             <div className="grid grid-cols-2 gap-4">
               <Card className="bg-muted border-border shadow-none">
                 <CardHeader className="pb-2">
                   <CardDescription className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600"><User className="w-3 h-3"/> Recipient</CardDescription>
-                  <CardTitle className="text-base text-zinc-600">{customer?.name || 'Unknown'}</CardTitle>
+                  <CardTitle className="text-base text-zinc-600 font-bold">{customer?.name || 'Unknown'}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-zinc-500">
                   {customer?.email}<br/>{customer?.phone}
@@ -299,14 +341,26 @@ export default function ReportsPage() {
               </Card>
               <Card className="bg-muted border-border shadow-none">
                 <CardHeader className="pb-2">
-                  <CardDescription className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600"><Package className="w-3 h-3"/> Asset</CardDescription>
-                  <CardTitle className="text-base text-zinc-600">{device?.imei || 'Unknown'}</CardTitle>
+                  <CardDescription className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-zinc-600"><FileText className="w-3 h-3"/> Logistics Ref</CardDescription>
+                  <CardTitle className="text-base text-zinc-600 font-mono font-bold">{selectedReport.data.signOffPath || 'NO_REF'}</CardTitle>
                 </CardHeader>
-                <CardContent className="text-xs text-zinc-500">
-                  {(device as any)?.modelName}<br/>{device?.serialNumber}
+                <CardContent className="text-[10px] text-zinc-500 uppercase font-bold">
+                  Digital Signature Stored
                 </CardContent>
               </Card>
             </div>
+
+            <div className="space-y-3">
+                <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                    <Package className="w-3 h-3"/> Bundle Node Breakdown
+                </h4>
+                <div className="p-4 bg-primary/5 border border-primary/10 rounded-xl">
+                    <p className="text-sm font-mono font-bold text-primary break-all leading-relaxed">
+                        {selectedReport.data.items || 'Primary Asset Record Only'}
+                    </p>
+                </div>
+            </div>
+
             <div className="space-y-3 px-1">
               <div className="flex items-center gap-3 text-sm">
                 <Calendar className="w-4 h-4 text-zinc-600" />
@@ -332,12 +386,12 @@ export default function ReportsPage() {
           <div className="space-y-4 pt-4">
             <div className="p-4 bg-muted border border-border rounded-lg">
               <h4 className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">Issue Description</h4>
-              <p className="text-sm text-foreground font-medium leading-relaxed">"{selectedReport.data.issueDescription}"</p>
+              <p className="text-sm text-foreground font-medium leading-relaxed">&quot;{selectedReport.data.issueDescription}&quot;</p>
             </div>
             <div className="grid grid-cols-2 gap-6 text-sm px-1">
               <div>
-                <span className="block font-bold text-zinc-600 uppercase text-[10px] mb-1">Asset IMEI</span>
-                <span className="font-mono text-foreground">{damagedDevice?.imei}</span>
+                <span className="block font-bold text-zinc-600 uppercase text-[10px] mb-1">Asset Identifier</span>
+                <span className="font-mono text-foreground">{damagedDevice?.identifier}</span>
               </div>
               <div>
                 <span className="block font-bold text-zinc-600 uppercase text-[10px] mb-1">Reported Date</span>
@@ -355,7 +409,22 @@ export default function ReportsPage() {
     }
   }
 
-  if (loading) return <div className="p-8 text-center animate-pulse">Analyzing reports...</div>
+  if (loading) return (
+    <div className="space-y-8">
+        <div className="flex justify-between items-end">
+            <div className="space-y-2">
+                <Skeleton className="h-10 w-[250px]" />
+                <Skeleton className="h-4 w-[400px]" />
+            </div>
+            <Skeleton className="h-10 w-[150px]" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Skeleton className="h-[400px] w-full rounded-2xl" />
+            <Skeleton className="h-[400px] w-full rounded-2xl" />
+        </div>
+        <Skeleton className="h-[500px] w-full rounded-2xl" />
+    </div>
+  )
 
   return (
     <div className="p-6 space-y-8 max-w-7xl mx-auto">
@@ -366,10 +435,10 @@ export default function ReportsPage() {
         </div>
         <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={handleExportSelected} className="border-border bg-card">
-                <Download className="w-4 h-4 mr-2" /> Export Selected
+                <Download className="w-4 h-4 mr-2" /> Export Selection
             </Button>
-            <Button variant="outline" size="sm" onClick={handleExportAll} className="border-border bg-card">
-                <Download className="w-4 h-4 mr-2" /> Export All
+            <Button variant="default" size="sm" onClick={handleMasterExport} className="shadow-lg shadow-primary/20 font-bold">
+                <FileSpreadsheet className="w-4 h-4 mr-2" /> Master Master Export
             </Button>
         </div>
       </div>
