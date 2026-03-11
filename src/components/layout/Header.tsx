@@ -23,7 +23,7 @@ const Header = () => {
   };
 
   return (
-    <header className="bg-card text-card-foreground border-b h-16 sticky top-0 z-30 flex items-center justify-between px-6">
+    <header className="glass text-card-foreground border-b h-16 sticky top-0 z-30 flex items-center justify-between px-6">
       <div className="flex items-center gap-4">
         {/* Mobile menu trigger could go here */}
       </div>
@@ -39,7 +39,7 @@ const Header = () => {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center gap-2 px-2 hover:bg-muted">
-                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-bold text-xs">
+                <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-orange-600 rounded-full flex items-center justify-center text-primary-foreground font-bold text-xs shadow-md shadow-primary/30 ring-2 ring-primary/20">
                   {session.user.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex flex-col items-start text-left hidden md:flex">

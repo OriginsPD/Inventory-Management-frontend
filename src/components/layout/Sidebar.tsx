@@ -39,10 +39,10 @@ const Sidebar = () => {
   ];
 
   return (
-    <aside className="w-64 bg-card text-zinc-600 h-screen fixed left-0 top-0 overflow-y-auto flex flex-col border-r border-border transition-colors duration-300">
+    <aside className="w-64 glass h-screen fixed left-0 top-0 overflow-y-auto flex flex-col border-r transition-colors duration-300">
       <div className="p-6">
         <Link href="/dashboard" className="flex items-center gap-2 mb-10 px-2 group">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-primary-foreground shadow-sm group-hover:scale-105 transition-transform">
+          <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg flex items-center justify-center text-primary-foreground shadow-md shadow-primary/30 group-hover:scale-105 transition-transform">
             <Package size={20} />
           </div>
           <span className="text-xl font-bold text-foreground tracking-tight">IMS Pro</span>
@@ -58,8 +58,8 @@ const Sidebar = () => {
                 className={cn(
                   "flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group",
                   isActive
-                    ? "bg-primary text-white shadow-md shadow-primary/20"
-                    : "text-zinc-500 hover:bg-orange-50 hover:text-primary dark:hover:bg-primary/10"
+                    ? "bg-gradient-to-r from-primary to-orange-600 text-white shadow-lg shadow-primary/30 ring-1 ring-primary/40"
+                    : "text-zinc-500 hover:bg-orange-50/80 hover:text-primary dark:text-slate-400 dark:hover:bg-primary/10"
                 )}
               >
                 <item.icon size={18} className={cn(
@@ -77,8 +77,8 @@ const Sidebar = () => {
               className={cn(
                 "flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group",
                 pathname.startsWith('/admin/users')
-                  ? "bg-primary text-white shadow-md shadow-primary/20"
-                  : "text-zinc-500 hover:bg-orange-50 hover:text-primary dark:hover:bg-primary/10"
+                  ? "bg-gradient-to-r from-primary to-orange-600 text-white shadow-lg shadow-primary/30 ring-1 ring-primary/40"
+                  : "text-zinc-500 hover:bg-orange-50/80 hover:text-primary dark:text-slate-400 dark:hover:bg-primary/10"
               )}
             >
               <UserCog size={18} className={cn(
@@ -91,8 +91,8 @@ const Sidebar = () => {
         </nav>
       </div>
 
-      <div className="mt-auto p-6 border-t border-border">
-        <div className="bg-muted/50 rounded-xl p-4 border border-border/50">
+      <div className="mt-auto p-6 border-t border-border/50">
+        <div className="bg-white/40 dark:bg-white/5 rounded-xl p-4 border border-white/30 dark:border-white/10 backdrop-blur-sm">
           <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mb-1">System Status</p>
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />

@@ -851,6 +851,23 @@ export default function DevicesPage() {
                       </FormItem>
                   )} />
 
+                  <div className="space-y-4 border-t border-border pt-6">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-primary">Physical Association</label>
+                      <FormField control={mainForm.control} name="pairedDeviceId" render={({ field }) => (
+                          <FormItem>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl><SelectTrigger className="bg-muted/30 border-border h-11 text-sm"><SelectValue placeholder="Link with existing asset..." /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value="none">None / Independent</SelectItem>
+                                {potentialPairingDevices.map((device) => (<SelectItem key={device.id} value={device.id}>{device.identifier} ({device.modelName})</SelectItem>))}
+                              </SelectContent>
+                            </Select>
+                            <FormDescription className="text-[9px]">Establish bidirectional link during creation.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                  </div>
+
                   {selectedModel?.assetType === 'SIM' && (
                     <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 border-t border-border pt-6">
                         <FormField control={mainForm.control} name="carrier" render={({ field }) => (
@@ -972,7 +989,7 @@ export default function DevicesPage() {
       </Dialog>
 
       <Dialog open={!!editingDevice} onOpenChange={(open) => !open && setEditingDevice(null)}>
-        <DialogContent className="sm:max-w-[500px] bg-card border-border">
+        <DialogContent className="sm:max-w-[500px] bg-card border-border overflow-y-auto max-h-[90vh]">
           <DialogHeader className="pb-6 border-b border-border"><DialogTitle className="text-2xl font-bold flex items-center gap-2"><Edit className="w-6 h-6 text-primary" /> Edit Asset Profile</DialogTitle></DialogHeader>
           <Form {...editForm}>
             <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-6 py-6">
@@ -982,6 +999,51 @@ export default function DevicesPage() {
               <FormField control={editForm.control} name="modelId" render={({ field }) => (
                   <FormItem><FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Hardware Model</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}><FormControl><SelectTrigger className="bg-muted/30 border-border h-11"><SelectValue placeholder="Select device model" /></SelectTrigger></FormControl><SelectContent>{models.map((model) => (<SelectItem key={model.id} value={model.id}>{model.brand} {model.name} ({model.assetType})</SelectItem>))}</SelectContent></Select></FormItem>
                 )} />
+
+              <div className="space-y-4 border-t border-border pt-6">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-primary">Manage Physical Associations</label>
+                  <FormField control={editForm.control} name="pairedDeviceId" render={({ field }) => (
+                      <FormItem>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value || undefined}>
+                          <FormControl><SelectTrigger className="bg-muted/30 border-border h-11 text-sm"><SelectValue placeholder="Link another asset..." /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">None / No Change</SelectItem>
+                            {potentialPairingDevices.map((device) => (<SelectItem key={device.id} value={device.id}>{device.identifier} ({device.modelName})</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-[10px] leading-tight">Valid logic: Dash Cam -&gt; SIM/SD/Tracker | Tracker -&gt; SIM/Panic/Fuel</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+              </div>
+
+              {selectedEditModel?.assetType === 'SIM' && (
+                <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 border-t border-border pt-6">
+                    <FormField control={editForm.control} name="carrier" render={({ field }) => (
+                        <FormItem><FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Carrier</FormLabel><FormControl><Input placeholder="Digicel / Flow" className="bg-muted/30 border-border h-11" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                    <FormField control={editForm.control} name="planExpiryDate" render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                            <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Plan Expiry</FormLabel>
+                            <Popover>
+                                <PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full bg-muted/30 border-border pl-3 text-left font-normal h-11", !field.value && "text-muted-foreground")}>{field.value ? format(new Date(field.value), "PPP") : <span>Pick a date</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value ? new Date(field.value) : undefined} onSelect={(date) => field.onChange(date?.toISOString())} disabled={(date) => date < new Date("1900-01-01")} initialFocus /></PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                        </FormItem>
+                        )} />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4 border-t border-border pt-6">
+                <FormField control={editForm.control} name="firmwareVersion" render={({ field }) => (
+                    <FormItem><FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Firmware</FormLabel><FormControl><Input placeholder="v1.0.0" className="bg-muted/30 border-border h-11" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                <FormField control={editForm.control} name="hardwareRevision" render={({ field }) => (
+                    <FormItem><FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Hardware Revision</FormLabel><FormControl><Input placeholder="Rev A" className="bg-muted/30 border-border h-11" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+              </div>
+
               <Button type="submit" className="w-full h-14 font-bold text-lg shadow-xl shadow-primary/10">Save Profile Updates</Button>
             </form>
           </Form>
