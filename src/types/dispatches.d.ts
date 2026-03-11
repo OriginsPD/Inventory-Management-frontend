@@ -7,13 +7,16 @@ export type Dispatch = {
   dispatchDate: string;
   dispatchedBy: string;
   location?: string | null;
+  signOffPath?: string | null;
   createdAt: string;
 };
 
 export type CreateDispatchDto = {
-  deviceId: string;
+  deviceId?: string;
+  deviceIds?: string[];
   customerId: string;
   dispatchDate: string;
   dispatchedBy: string;
   location?: string;
+  signOffPath?: string;
 };

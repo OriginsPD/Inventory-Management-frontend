@@ -5,6 +5,19 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Smart Sanitization for IMEIs/Serial Numbers
+ * Trims whitespace and removes common scanner artifacts like leading single quotes.
+ */
+export function sanitizeIMEI(input: string): string {
+    if (!input) return "";
+    let sanitized = input.trim();
+    if (sanitized.startsWith("'")) {
+        sanitized = sanitized.substring(1);
+    }
+    return sanitized;
+}
+
 export function playBeep() {
     if (typeof window === 'undefined') return;
     try {

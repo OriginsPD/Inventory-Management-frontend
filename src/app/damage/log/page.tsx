@@ -30,7 +30,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMemo } from 'react';
-import { cn } from '@/lib/utils';
+import { cn, sanitizeIMEI } from '@/lib/utils';
 
 const formSchema = z.object({
   deviceId: z.string().uuid('Please select a valid device'),
@@ -162,7 +162,7 @@ export default function LogDamagePage() {
                             placeholder="Search by ID / IMEI..." 
                             className="pl-10 h-10 border-border bg-muted/10 mb-2"
                             value={assetSearchTerm}
-                            onChange={(e) => setAssetSearchTerm(e.target.value)}
+                            onChange={(e) => setAssetSearchTerm(sanitizeIMEI(e.target.value))}
                         />
                     </div>
                     <FormField

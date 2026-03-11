@@ -26,8 +26,12 @@ export default function AppShell({
   }, []);
 
   useEffect(() => {
-    if (mounted && !isPending && !session && !isAuthPage && !isPublicPage) {
-      router.push("/login");
+    if (mounted && !isPending) {
+        if (!session && !isAuthPage && !isPublicPage) {
+            router.push("/login");
+        } else if (session && isPublicPage) {
+            router.push("/dashboard");
+        }
     }
   }, [session, isPending, isAuthPage, isPublicPage, router, mounted]);
 

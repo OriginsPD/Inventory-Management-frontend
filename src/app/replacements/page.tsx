@@ -30,7 +30,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMemo } from 'react';
-import { cn } from '@/lib/utils';
+import { cn, sanitizeIMEI } from '@/lib/utils';
 import { format } from "date-fns"
 import { Calendar } from "@/components/ui/calendar"
 import {
@@ -185,7 +185,7 @@ export default function ReplacementPage() {
                             placeholder="Search by ID / IMEI..." 
                             className="pl-10 h-10 border-border bg-muted/10 mb-2"
                             value={oldAssetSearchTerm}
-                            onChange={(e) => setOldAssetSearchTerm(e.target.value)}
+                            onChange={(e) => setOldAssetSearchTerm(sanitizeIMEI(e.target.value))}
                         />
                     </div>
                     <FormField
@@ -240,7 +240,7 @@ export default function ReplacementPage() {
                             placeholder="Search by ID / IMEI..." 
                             className="pl-10 h-10 border-border bg-muted/10 mb-2"
                             value={newAssetSearchTerm}
-                            onChange={(e) => setNewAssetSearchTerm(e.target.value)}
+                            onChange={(e) => setNewAssetSearchTerm(sanitizeIMEI(e.target.value))}
                         />
                     </div>
                     <FormField

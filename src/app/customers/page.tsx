@@ -126,6 +126,12 @@ export default function CustomersPage() {
     }
   }, [editingCustomer, editForm])
 
+  useEffect(() => {
+    if (!isAddOpen) {
+      form.reset()
+    }
+  }, [isAddOpen, form])
+
   async function loadCustomers() {
     try {
       const data = await fetchCustomers()
@@ -301,9 +307,9 @@ export default function CustomersPage() {
         </div>
         <Skeleton className="h-10 w-[150px]" />
       </div>
-      <Card className="border-border">
-        <div className="p-0">
-          {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
+      <Card className="border-border shadow-md">
+        <div className="p-4 space-y-4">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
         </div>
       </Card>
     </div>
@@ -319,25 +325,27 @@ export default function CustomersPage() {
         
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
-            <Button variant="default" className="shadow-md font-bold">
+            <Button variant="default" className="shadow-md font-bold h-11 px-6">
               <UserPlus className="w-4 h-4 mr-2" /> Add Customer
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px] bg-card border-border">
             <DialogHeader>
-              <DialogTitle className="text-xl font-bold">New Customer</DialogTitle>
-              <DialogDescription>Add a new individual or business to the database.</DialogDescription>
+              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                <UserPlus className="h-6 w-6 text-primary" /> New Customer
+              </DialogTitle>
+              <DialogDescription>Register a new client entity in the system ledger.</DialogDescription>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
                 <FormField
                   control={form.control}
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Full Name / Company</FormLabel>
+                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Full Name / Company Name</FormLabel>
                       <FormControl>
-                        <Input placeholder="Acme Corp" className="bg-muted/30 border-border" {...field} />
+                        <Input placeholder="Acme Corporation" className="bg-muted/30 border-border h-11" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -348,9 +356,9 @@ export default function CustomersPage() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Email Address</FormLabel>
+                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Primary Email Address</FormLabel>
                       <FormControl>
-                        <Input placeholder="billing@acme.com" className="bg-muted/30 border-border" {...field} />
+                        <Input placeholder="billing@acme.com" className="bg-muted/30 border-border h-11" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -361,15 +369,17 @@ export default function CustomersPage() {
                   name="phone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Phone Number</FormLabel>
+                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Direct Contact Number</FormLabel>
                       <FormControl>
-                        <Input placeholder="+1 (555) 000-0000" className="bg-muted/30 border-border" {...field} />
+                        <Input placeholder="+1 (555) 000-0000" className="bg-muted/30 border-border h-11" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full mt-4 h-11 font-bold">Save Customer</Button>
+                <div className="pt-4">
+                  <Button type="submit" className="w-full h-14 font-bold text-lg shadow-xl shadow-primary/10">Register Customer</Button>
+                </div>
               </form>
             </Form>
           </DialogContent>
@@ -470,8 +480,8 @@ export default function CustomersPage() {
 
       {/* View Detail Modal */}
       <Dialog open={!!viewingCustomer} onOpenChange={(open) => !open && setViewingCustomer(null)}>
-        <DialogContent className="sm:max-w-[450px] bg-card border-border">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[500px] bg-card border-border">
+          <DialogHeader className="pb-4 border-b border-border">
             <DialogTitle className="flex items-center gap-2 text-2xl font-bold">
                 <Briefcase className="w-6 h-6 text-primary"/> Customer Profile
             </DialogTitle>
@@ -520,11 +530,11 @@ export default function CustomersPage() {
                     <div className="grid grid-cols-2 gap-4 text-xs">
                         <div className="space-y-1">
                             <span className="text-zinc-400 block text-[10px] uppercase font-bold">Created At</span>
-                            <span className="text-foreground font-mono">{new Date(viewingCustomer.createdAt).toLocaleDateString()}</span>
+                            <span className="text-foreground font-mono">{new Date(viewingCustomer.createdAt).toLocaleString()}</span>
                         </div>
                         <div className="space-y-1 text-right">
                             <span className="text-zinc-400 block text-[10px] uppercase font-bold">Last Activity</span>
-                            <span className="text-foreground font-mono">{new Date(viewingCustomer.updatedAt).toLocaleDateString()}</span>
+                            <span className="text-foreground font-mono">{new Date(viewingCustomer.updatedAt).toLocaleString()}</span>
                         </div>
                     </div>
                 </div>
@@ -539,7 +549,7 @@ export default function CustomersPage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="text-xl font-bold">Purge Customer Record?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove this customer? This action is immutable and will affect historical dispatch relations.
+              Are you sure you want to remove this customer? This action is immutable.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -553,9 +563,11 @@ export default function CustomersPage() {
 
       {/* Edit Dialog */}
       <Dialog open={!!editingCustomer} onOpenChange={(open) => !open && setEditingCustomer(null)}>
-        <DialogContent className="sm:max-w-[425px] bg-card border-border">
+        <DialogContent className="sm:max-w-[450px] bg-card border-border">
           <DialogHeader>
-            <DialogTitle className="text-xl font-bold">Modify Information</DialogTitle>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Edit className="w-6 h-6 text-primary" /> Edit Profile
+            </DialogTitle>
             <DialogDescription>Update contact parameters for this client entity.</DialogDescription>
           </DialogHeader>
           <Form {...editForm}>
@@ -567,7 +579,7 @@ export default function CustomersPage() {
                   <FormItem>
                     <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Full Name / Entity</FormLabel>
                     <FormControl>
-                      <Input {...field} className="bg-muted/30 border-border" />
+                      <Input {...field} className="bg-muted/30 border-border h-11" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -580,7 +592,7 @@ export default function CustomersPage() {
                   <FormItem>
                     <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Contact Email</FormLabel>
                     <FormControl>
-                      <Input {...field} className="bg-muted/30 border-border" />
+                      <Input {...field} className="bg-muted/30 border-border h-11" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -593,13 +605,15 @@ export default function CustomersPage() {
                   <FormItem>
                     <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Direct Phone</FormLabel>
                     <FormControl>
-                      <Input {...field} className="bg-muted/30 border-border" />
+                      <Input {...field} className="bg-muted/30 border-border h-11" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full mt-4 h-11 font-bold">Commit Changes</Button>
+              <div className="pt-4 border-t border-border">
+                <Button type="submit" className="w-full h-14 font-bold text-lg shadow-xl shadow-primary/10">Update Profile</Button>
+              </div>
             </form>
           </Form>
         </DialogContent>

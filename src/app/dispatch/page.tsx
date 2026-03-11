@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { Send, History, CheckCircle2, X, Package, FileText, Plus, Search, Camera } from "lucide-react"
+import { Send, History, CheckCircle2, X, Package, FileText, Plus, Search } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -38,7 +38,7 @@ import { useRouter } from "next/navigation"
 import { authClient } from "@/lib/auth-client"
 import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
-import { cn, playBeep } from "@/lib/utils"
+import { cn, playBeep, sanitizeIMEI } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 
 const formSchema = z.object({
@@ -107,10 +107,7 @@ export default function DispatchPage() {
   }
 
   const handleHardwareScan = () => {
-    let sanitized = hardwareScanValue.trim();
-    if (sanitized.startsWith("'")) {
-        sanitized = sanitized.substring(1);
-    }
+    const sanitized = sanitizeIMEI(hardwareScanValue);
     if (!sanitized) return;
 
     const device = devices.find(d => d.identifier.toLowerCase() === sanitized.toLowerCase())
@@ -293,7 +290,7 @@ export default function DispatchPage() {
                                     placeholder="Rapid Scan IMEI..." 
                                     className="h-10 border-border bg-primary/5 font-mono text-xs focus:ring-2 focus:ring-primary/50"
                                     value={hardwareScanValue}
-                                    onChange={(e) => setHardwareScanValue(e.target.value)}
+                                    onChange={(e) => setHardwareScanValue(sanitizeIMEI(e.target.value))}
                                     onKeyDown={(e) => e.key === 'Enter' && handleHardwareScan()}
                                 />
                                 <Button size="icon" variant="outline" className="shrink-0 h-10 w-10 border-border" onClick={handleHardwareScan}>
@@ -313,7 +310,7 @@ export default function DispatchPage() {
                                 placeholder="Search by IMEI..." 
                                 className="pl-10 h-10 border-border bg-muted/10"
                                 value={assetSearchTerm}
-                                onChange={(e) => setAssetSearchTerm(e.target.value)}
+                                onChange={(e) => setAssetSearchTerm(sanitizeIMEI(e.target.value))}
                             />
                         </div>
                         <Select onValueChange={toggleDevice} value="">

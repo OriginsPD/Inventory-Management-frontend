@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { fetchStatusDistributionReport, fetchInventoryByModelReport, fetchDevices } from "@/lib/api"
+import { fetchStatusDistributionReport, fetchInventoryByModelReport, fetchDevices, fetchStockTrend, fetchDispatchTrend } from "@/lib/api"
 import { StatusDistributionReport, InventoryByModelReport } from "@/types/reports"
 import { Device } from "@/types/devices"
 import Link from "next/link"
@@ -49,19 +49,25 @@ export default function Home() {
   const [statusReport, setStatusReport] = useState<StatusDistributionReport[]>([])
   const [inventoryReport, setInventoryByModel] = useState<InventoryByModelReport[]>([])
   const [allDevices, setAllDevices] = useState<Device[]>([])
+  const [stockTrend, setStockTrend] = useState<any[]>([])
+  const [dispatchTrend, setDispatchTrend] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadStats() {
       try {
-        const [stat, inv, devices] = await Promise.all([
+        const [stat, inv, devices, stkTrend, dspTrend] = await Promise.all([
           fetchStatusDistributionReport(),
           fetchInventoryByModelReport(),
-          fetchDevices()
+          fetchDevices(),
+          fetchStockTrend().catch(() => []),
+          fetchDispatchTrend().catch(() => []),
         ])
         setStatusReport(stat)
         setInventoryByModel(inv)
         setAllDevices(devices)
+        setStockTrend(Array.isArray(stkTrend) ? stkTrend : (stkTrend as any)?.rows || [])
+        setDispatchTrend(Array.isArray(dspTrend) ? dspTrend : (dspTrend as any)?.rows || [])
       } catch (err) {
         console.error("Failed to load dashboard stats", err)
       } finally {
@@ -71,18 +77,24 @@ export default function Home() {
     loadStats()
   }, [])
 
-  const totalAssets = useMemo(() => statusReport.reduce((acc, curr) => acc + Number(curr.count), 0), [statusReport])
+  const totalAssets = useMemo(() => {
+    if (!Array.isArray(statusReport)) return 0;
+    return statusReport.reduce((acc, curr) => acc + Number(curr.count || 0), 0);
+  }, [statusReport]);
   
   const getCount = (status: string) => {
+    if (!Array.isArray(statusReport)) return 0;
     return statusReport.find(s => s.status === status)?.count || 0
   }
 
   // Alerts & Notifications Logic
   const criticalModels = useMemo(() => {
-      return inventoryReport.filter(m => m.totalStock <= m.minStock && m.minStock > 0);
+      if (!Array.isArray(inventoryReport)) return [];
+      return inventoryReport.filter(m => Number(m.totalStock || 0) <= Number(m.minStock || 0) && Number(m.minStock || 0) > 0);
   }, [inventoryReport]);
 
   const expiringSIMs = useMemo(() => {
+      if (!Array.isArray(allDevices)) return [];
       const thirtyDaysFromNow = new Date();
       thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
       return allDevices.filter(d => 
@@ -94,20 +106,22 @@ export default function Home() {
 
   // Chart Data Formatting
   const statusData = useMemo(() => {
+      if (!Array.isArray(statusReport)) return [];
       return statusReport.map(s => ({
-          name: s.status.replace('_', ' '),
-          value: Number(s.count)
+          name: (s.status || 'UNKNOWN').replace('_', ' '),
+          value: Number(s.count || 0)
       })).filter(s => s.value > 0);
   }, [statusReport]);
 
   const modelData = useMemo(() => {
-      return inventoryReport
-        .sort((a, b) => b.totalStock - a.totalStock)
+      if (!Array.isArray(inventoryReport)) return [];
+      return [...inventoryReport]
+        .sort((a, b) => Number(b.totalStock || 0) - Number(a.totalStock || 0))
         .slice(0, 6)
         .map(m => ({
-            name: m.modelName,
-            total: Number(m.totalStock),
-            min: Number(m.minStock)
+            name: m.modelName || 'Unknown',
+            total: Number(m.totalStock || 0),
+            min: Number(m.minStock || 0)
         }));
   }, [inventoryReport]);
 
@@ -191,6 +205,7 @@ export default function Home() {
                         <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                     )}
                 </TabsTrigger>
+                <TabsTrigger value="trends" className="px-6 font-bold uppercase text-[10px] tracking-widest">Trends</TabsTrigger>
             </TabsList>
             <Button variant="ghost" size="sm" className="text-zinc-500 font-bold text-[10px] uppercase tracking-widest hover:text-primary" asChild>
                 <Link href="/reports">View detailed logs <ChevronRight className="ml-1 w-3 h-3"/></Link>
@@ -255,7 +270,7 @@ export default function Home() {
                                     outerRadius={80}
                                     paddingAngle={5}
                                     dataKey="value"
-                                    label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}
+                                    label={({ name, percent }) => percent ? `${(percent * 100).toFixed(0)}%` : ""}
                                     labelLine={false}
                                 >
                                     {statusData.map((entry, index) => (
@@ -423,6 +438,38 @@ export default function Home() {
                 </Card>
             </div>
         </TabsContent>
+
+        <TabsContent value="trends" className="animate-in fade-in slide-in-from-bottom-2">
+          <Card className="border-border shadow-md h-[450px]">
+            <CardHeader>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-primary" /> Stock & Dispatch Trends
+              </CardTitle>
+              <CardDescription>Stock received vs dispatched over the last 12 months.</CardDescription>
+            </CardHeader>
+            <CardContent className="h-[350px] pb-10">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={(() => {
+                  const months = new Set<string>();
+                  stockTrend.forEach((s: any) => months.add(s.month));
+                  dispatchTrend.forEach((d: any) => months.add(d.month));
+                  return Array.from(months).sort().map(month => ({
+                    month,
+                    received: Number(stockTrend.find((s: any) => s.month === month)?.total_received || 0),
+                    dispatched: Number(dispatchTrend.find((d: any) => d.month === month)?.total_dispatched || 0),
+                  }));
+                })()}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10}} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', backgroundColor: 'rgba(255, 255, 255, 0.95)' }} />
+                  <Line type="monotone" dataKey="received" stroke="#f97316" strokeWidth={2} dot={{ fill: '#f97316', r: 4 }} name="Stock Received" />
+                  <Line type="monotone" dataKey="dispatched" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6', r: 4 }} name="Dispatched" />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -456,7 +503,7 @@ export default function Home() {
               <div>
                   <h4 className="text-xl font-bold text-foreground">Operational Growth</h4>
                   <p className="text-sm text-zinc-500 max-w-xs mt-2 italic leading-relaxed">
-                      "System throughput is optimized for rapid hardware cycles. Every scanned barcode strengthens the core intelligence ledger."
+                      &quot;System throughput is optimized for rapid hardware cycles. Every scanned barcode strengthens the core intelligence ledger.&quot;
                   </p>
               </div>
           </div>

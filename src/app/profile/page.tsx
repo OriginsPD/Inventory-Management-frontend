@@ -4,12 +4,22 @@ import { useState, useEffect } from "react"
 import { authClient } from "@/lib/auth-client"
 import { fetchAuditLogs } from "@/lib/api"
 import { AuditLog } from "@/types/audit"
-import { User, Mail, Shield, Clock, Activity, Hash, Smartphone, Loader2 } from "lucide-react"
+import { User, Mail, Shield, Clock, Activity, Smartphone, Loader2, Edit } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 export default function ProfilePage() {
   const { data: session, isPending: sessionPending } = authClient.useSession()
@@ -17,16 +27,22 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const { toast } = useToast()
 
+  // Edit dialog state
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [editName, setEditName] = useState("")
+  const [editEmail, setEditEmail] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+
   useEffect(() => {
     async function loadUserActivity() {
       if (!session?.user) return
       try {
-        const allLogs = await fetchAuditLogs()
-        // Filter logs where performedBy matches current user name or email
-        const userActions = allLogs.filter(log => 
-            log.performedBy === session.user.name || 
+        const result = await fetchAuditLogs({ limit: 50 })
+        const allLogs = result.data
+        const userActions = allLogs.filter(log =>
+            log.performedBy === session.user.name ||
             log.performedBy === session.user.email ||
-            log.performedBy === 'INVENTORY_OFFICER' // Temporary fallback for system assigned actions
+            log.performedBy === 'INVENTORY_OFFICER'
         )
         setLogs(userActions)
       } catch (err) {
@@ -39,6 +55,25 @@ export default function ProfilePage() {
         loadUserActivity()
     }
   }, [session, sessionPending, toast])
+
+  const openEditDialog = () => {
+    setEditName(session?.user?.name || "")
+    setEditEmail(session?.user?.email || "")
+    setIsEditOpen(true)
+  }
+
+  const handleSaveProfile = async () => {
+    setIsSaving(true)
+    try {
+      await (authClient as any).updateUser({ name: editName, email: editEmail })
+      toast({ title: "Profile Updated", description: "Your profile information has been saved." })
+      setIsEditOpen(false)
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to update profile.", variant: "destructive" })
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   if (sessionPending || loading) return (
     <div className="max-w-5xl mx-auto space-y-8">
@@ -70,6 +105,9 @@ export default function ProfilePage() {
                         </div>
                     </div>
                 </div>
+                <Button variant="outline" onClick={openEditDialog} className="border-border font-bold">
+                    <Edit className="w-4 h-4 mr-2" /> Edit Profile
+                </Button>
             </div>
         </CardContent>
       </Card>
@@ -144,6 +182,40 @@ export default function ProfilePage() {
             </Table>
         </Card>
       </div>
+
+      {/* Edit Profile Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Edit Profile</DialogTitle>
+            <DialogDescription>Update your name and email address.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Full Name</Label>
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="bg-muted/30 border-border"
+                placeholder="Your full name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Email Address</Label>
+              <Input
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                className="bg-muted/30 border-border"
+                placeholder="your@email.com"
+                type="email"
+              />
+            </div>
+            <Button onClick={handleSaveProfile} className="w-full h-11 font-bold mt-4" disabled={isSaving}>
+              {isSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

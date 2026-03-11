@@ -34,7 +34,7 @@ import { fetchDevices, startDeviceTest } from "@/lib/api"
 import { Device } from "@/types/devices"
 import { useToast } from "@/hooks/use-toast"
 import { Skeleton } from "@/components/ui/skeleton"
-import { playBeep } from "@/lib/utils"
+import { playBeep, sanitizeIMEI } from "@/lib/utils"
 
 const formSchema = z.object({
   deviceId: z.string().min(1, { message: "Please select a device." }),
@@ -73,10 +73,7 @@ export default function StartTestPage() {
   }, [toast])
 
   const handleHardwareScan = () => {
-    let sanitized = hardwareScanValue.trim();
-    if (sanitized.startsWith("'")) {
-        sanitized = sanitized.substring(1);
-    }
+    const sanitized = sanitizeIMEI(hardwareScanValue);
     if (!sanitized) return;
 
     const device = eligibleDevices.find(d => d.identifier.toLowerCase() === sanitized.toLowerCase())
@@ -144,7 +141,7 @@ export default function StartTestPage() {
                           placeholder="Scan IMEI for instant selection..." 
                           className="h-10 border-border bg-card font-mono text-xs focus:ring-2 focus:ring-primary/50"
                           value={hardwareScanValue}
-                          onChange={(e) => setHardwareScanValue(e.target.value)}
+                          onChange={(e) => setHardwareScanValue(sanitizeIMEI(e.target.value))}
                           onKeyDown={(e) => e.key === 'Enter' && handleHardwareScan()}
                       />
                       <Button size="icon" variant="outline" className="shrink-0 h-10 w-10 border-border" onClick={handleHardwareScan}>

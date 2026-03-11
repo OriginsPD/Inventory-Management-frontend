@@ -31,18 +31,35 @@ class GlobalErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-muted p-6">
-          <div className="bg-card p-8 rounded-lg shadow-md max-w-md w-full text-center">
-            <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
-            <p className="text-gray-600 mb-6">
-              We encountered an unexpected error. Our team has been notified.
+        <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 p-6">
+          <div className="bg-card p-10 rounded-3xl shadow-xl border border-border max-w-lg w-full text-center space-y-6">
+            <div className="w-20 h-20 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <h2 className="text-3xl font-black text-foreground tracking-tighter">Unexpected System Error</h2>
+            <p className="text-zinc-500 leading-relaxed">
+              The internal engine encountered a collision. Your session integrity is preserved, but this component had to be halted.
             </p>
-            <button
-              onClick={() => this.setState({ hasError: false })}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
-            >
-              Try again
-            </button>
+            <div className="flex flex-col gap-3 pt-4">
+                <button
+                onClick={() => {
+                    this.setState({ hasError: false });
+                    window.location.reload();
+                }}
+                className="bg-primary text-primary-foreground h-12 rounded-xl font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20"
+                >
+                Restart Session
+                </button>
+                <button
+                onClick={() => {
+                    this.setState({ hasError: false });
+                    window.location.href = '/dashboard';
+                }}
+                className="text-zinc-500 font-bold text-sm hover:text-foreground transition-colors"
+                >
+                Return to Dashboard
+                </button>
+            </div>
           </div>
         </div>
       );

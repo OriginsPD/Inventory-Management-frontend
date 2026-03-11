@@ -1,13 +1,16 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { 
-  fetchInventoryByModelReport, 
-  fetchStatusDistributionReport, 
-  fetchDispatchReportSummary, 
+import {
+  fetchInventoryByModelReport,
+  fetchStatusDistributionReport,
+  fetchDispatchReportSummary,
   fetchDamageReportSummary,
   fetchDevices,
-  fetchCustomers
+  fetchCustomers,
+  fetchTestingSummary,
+  fetchReplacementsSummary,
+  fetchDispatchItems
 } from "@/lib/api"
 import { 
   InventoryByModelReport, 
@@ -68,6 +71,8 @@ import * as XLSX from 'xlsx'
 
 type ReportType = "inventory" | "status" | "dispatch" | "damage"
 
+const ORG_NAME = process.env.NEXT_PUBLIC_ORG_NAME || 'IMS';
+
 export default function ReportsPage() {
   const [inventoryReport, setInventoryByModel] = useState<InventoryByModelReport[]>([])
   const [statusReport, setStatusDistribution] = useState<StatusDistributionReport[]>([])
@@ -75,10 +80,18 @@ export default function ReportsPage() {
   const [damageReport, setDamageSummary] = useState<DamageReportSummary[]>([])
   const [allDevices, setAllDevices] = useState<Device[]>([])
   const [allCustomers, setAllCustomers] = useState<Customer[]>([])
-  
+  const [testingSummary, setTestingSummary] = useState<any>(null)
+  const [replacementsSummary, setReplacementsSummary] = useState<any[]>([])
+  const [dispatchItems, setDispatchItems] = useState<any[]>([])
+  const [isLoadingItems, setIsLoadingItems] = useState(false)
+
+  // Date range filter state
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
+
   const [loading, setLoading] = useState(true)
   const [selectedReport, setSelectedReport] = useState<{ type: ReportType, data: any } | null>(null)
-  
+
   // Data Table State
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -89,13 +102,15 @@ export default function ReportsPage() {
   useEffect(() => {
     async function loadReports() {
       try {
-        const [inv, stat, disp, dmg, devices, customers] = await Promise.all([
+        const [inv, stat, disp, dmg, devices, customers, testing, replacements] = await Promise.all([
           fetchInventoryByModelReport(),
           fetchStatusDistributionReport(),
           fetchDispatchReportSummary(),
           fetchDamageReportSummary(),
           fetchDevices(),
-          fetchCustomers()
+          fetchCustomers(),
+          fetchTestingSummary(),
+          fetchReplacementsSummary(),
         ])
         setInventoryByModel(inv)
         setStatusDistribution(stat)
@@ -103,6 +118,8 @@ export default function ReportsPage() {
         setDamageSummary(dmg)
         setAllDevices(devices)
         setAllCustomers(customers)
+        setTestingSummary(testing)
+        setReplacementsSummary(replacements)
       } catch (err: any) {
         toast({
           title: "Failed to load reports",
@@ -115,6 +132,15 @@ export default function ReportsPage() {
     }
     loadReports()
   }, [toast])
+
+  const handleDateFilter = async () => {
+    try {
+      const disp = await fetchDispatchReportSummary(startDate || undefined, endDate || undefined)
+      setDispatchSummary(disp)
+    } catch (err: any) {
+      toast({ title: "Filter Error", description: err.message, variant: "destructive" })
+    }
+  }
 
   const totalDevices = statusReport.reduce((acc, curr) => acc + Number(curr.count), 0)
 
@@ -203,7 +229,7 @@ export default function ReportsPage() {
     const wsDmg = XLSX.utils.json_to_sheet(anomalyData);
     XLSX.utils.book_append_sheet(wb, wsDmg, "Anomaly Reports");
 
-    XLSX.writeFile(wb, `Jamaica_Master_Dispatch_Digital_${new Date().getTime()}.xlsx`);
+    XLSX.writeFile(wb, `${ORG_NAME}_Master_Export_${new Date().getTime()}.xlsx`);
     
     toast({
       title: "Master Export Complete",
@@ -248,7 +274,8 @@ export default function ReportsPage() {
       header: "Recipient",
       cell: ({ row }) => {
         const cust = allCustomers.find(c => c.id === row.getValue("customerId"));
-        return <div className="text-zinc-600 font-medium">{cust?.name || "Loading..."}</div>;
+        if (!cust) return <Skeleton className="h-4 w-24" />;
+        return <div className="text-zinc-600 font-medium">{cust.name}</div>;
       },
     },
     {
@@ -270,7 +297,18 @@ export default function ReportsPage() {
             variant="ghost" 
             size="icon" 
             className="h-8 w-8 text-zinc-600 hover:text-foreground"
-            onClick={() => setSelectedReport({ type: "dispatch", data: row.original })}
+            onClick={async () => {
+        setSelectedReport({ type: "dispatch", data: row.original });
+        setIsLoadingItems(true);
+        try {
+          const items = await fetchDispatchItems(row.original.id);
+          setDispatchItems(items);
+        } catch {
+          setDispatchItems([]);
+        } finally {
+          setIsLoadingItems(false);
+        }
+      }}
           >
             <Eye className="w-4 h-4" />
           </Button>
@@ -354,11 +392,25 @@ export default function ReportsPage() {
                 <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
                     <Package className="w-3 h-3"/> Bundle Node Breakdown
                 </h4>
-                <div className="p-4 bg-primary/5 border border-primary/10 rounded-xl">
+                {isLoadingItems ? (
+                  <div className="p-4 bg-primary/5 border border-primary/10 rounded-xl flex justify-center">
+                    <span className="text-xs text-zinc-500">Loading items...</span>
+                  </div>
+                ) : dispatchItems.length > 0 ? (
+                  <div className="p-4 bg-primary/5 border border-primary/10 rounded-xl space-y-1 max-h-32 overflow-y-auto">
+                    {dispatchItems.map((item: any) => (
+                      <p key={item.id} className="text-sm font-mono font-bold text-primary">
+                        {item.identifier}
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 bg-primary/5 border border-primary/10 rounded-xl">
                     <p className="text-sm font-mono font-bold text-primary break-all leading-relaxed">
                         {selectedReport.data.items || 'Primary Asset Record Only'}
                     </p>
-                </div>
+                  </div>
+                )}
             </div>
 
             <div className="space-y-3 px-1">
@@ -544,6 +596,68 @@ export default function ReportsPage() {
         </Card>
       </div>
 
+      {/* QC Testing Summary Card */}
+      {testingSummary && (
+        <Card className="border border-border shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <CheckCircle2 className="w-5 h-5 text-zinc-600" /> QC Testing Summary
+            </CardTitle>
+            <CardDescription>Pass/fail breakdown for device testing.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                <p className="text-2xl font-bold text-emerald-700">{testingSummary.passCount}</p>
+                <p className="text-xs text-emerald-600 font-bold uppercase tracking-widest mt-1">Pass</p>
+              </div>
+              <div className="p-4 bg-red-50 rounded-xl border border-red-100">
+                <p className="text-2xl font-bold text-red-700">{testingSummary.failCount}</p>
+                <p className="text-xs text-red-600 font-bold uppercase tracking-widest mt-1">Fail</p>
+              </div>
+              <div className="p-4 bg-primary/5 rounded-xl border border-primary/10">
+                <p className="text-2xl font-bold text-primary">{testingSummary.passRate}%</p>
+                <p className="text-xs text-primary font-bold uppercase tracking-widest mt-1">Pass Rate</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Replacement History Table */}
+      {replacementsSummary.length > 0 && (
+        <Card className="border border-border shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <FileText className="w-5 h-5 text-zinc-600" /> Replacement History
+            </CardTitle>
+            <CardDescription>Recent device replacements.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableHead className="text-[10px] font-bold uppercase text-zinc-500 py-3">Old Device</TableHead>
+                  <TableHead className="text-[10px] font-bold uppercase text-zinc-500 py-3">New Device</TableHead>
+                  <TableHead className="text-[10px] font-bold uppercase text-zinc-500 py-3">Reason</TableHead>
+                  <TableHead className="text-[10px] font-bold uppercase text-zinc-500 py-3">Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {replacementsSummary.slice(0, 10).map((r: any) => (
+                  <TableRow key={r.id} className="border-border/40 hover:bg-muted/30">
+                    <TableCell className="font-mono text-xs">{r.oldDeviceId?.substring(0, 8)}...</TableCell>
+                    <TableCell className="font-mono text-xs">{r.newDeviceId?.substring(0, 8)}...</TableCell>
+                    <TableCell className="text-xs text-zinc-500">{r.reason}</TableCell>
+                    <TableCell className="text-xs text-zinc-400">{r.replacementDate ? new Date(r.replacementDate).toLocaleDateString() : 'N/A'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Movement Log - Data Table Implementation */}
       <Card className="border border-border shadow-sm overflow-hidden">
         <CardHeader className="bg-muted/30 border-b border-border">
@@ -554,16 +668,33 @@ export default function ReportsPage() {
               </CardTitle>
               <CardDescription>Advanced data grid with multi-select and filtering.</CardDescription>
             </div>
-            <div className="relative max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-                <Input
-                    placeholder="Filter records..."
-                    value={(table.getColumn("customerId")?.getFilterValue() as string) ?? ""}
-                    onChange={(event) =>
-                        table.getColumn("customerId")?.setFilterValue(event.target.value)
-                    }
-                    className="pl-10 h-10 border-border bg-card w-full md:w-[250px]"
-                />
+            <div className="flex flex-wrap gap-2 items-center">
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="h-9 border-border bg-card w-[150px] text-xs"
+                placeholder="Start date"
+              />
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="h-9 border-border bg-card w-[150px] text-xs"
+                placeholder="End date"
+              />
+              <Button size="sm" onClick={handleDateFilter} className="h-9 font-bold text-xs">Filter</Button>
+              <div className="relative max-w-sm">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                  <Input
+                      placeholder="Filter records..."
+                      value={(table.getColumn("customerId")?.getFilterValue() as string) ?? ""}
+                      onChange={(event) =>
+                          table.getColumn("customerId")?.setFilterValue(event.target.value)
+                      }
+                      className="pl-10 h-10 border-border bg-card w-full md:w-[200px]"
+                  />
+              </div>
             </div>
           </div>
         </CardHeader>

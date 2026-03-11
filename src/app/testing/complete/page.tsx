@@ -36,7 +36,7 @@ import { fetchDevices, fetchDeviceTests, completeDeviceTest } from "@/lib/api"
 import { DeviceTest } from "@/types/device-testing"
 import { Device } from "@/types/devices"
 import { useToast } from "@/hooks/use-toast"
-import { cn, playBeep } from "@/lib/utils"
+import { cn, playBeep, sanitizeIMEI } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 
 const formSchema = z.object({
@@ -88,10 +88,7 @@ export default function CompleteTestPage() {
   }, [toast])
 
   const handleHardwareScan = () => {
-    let sanitized = hardwareScanValue.trim();
-    if (sanitized.startsWith("'")) {
-        sanitized = sanitized.substring(1);
-    }
+    const sanitized = sanitizeIMEI(hardwareScanValue);
     if (!sanitized) return;
 
     const device = testingDevices.find(d => d.identifier.toLowerCase() === sanitized.toLowerCase())
@@ -176,7 +173,7 @@ export default function CompleteTestPage() {
                       placeholder="Scan IMEI to identify QC session..." 
                       className="h-10 border-border bg-card font-mono text-xs focus:ring-2 focus:ring-primary/50"
                       value={hardwareScanValue}
-                      onChange={(e) => setHardwareScanValue(e.target.value)}
+                      onChange={(e) => setHardwareScanValue(sanitizeIMEI(e.target.value))}
                       onKeyDown={(e) => e.key === 'Enter' && handleHardwareScan()}
                   />
                   <Button size="icon" variant="outline" className="shrink-0 h-10 w-10 border-border" onClick={handleHardwareScan}>

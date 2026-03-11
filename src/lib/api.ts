@@ -1,6 +1,6 @@
 // frontend/src/lib/api.ts
 import { DeviceModel, CreateDeviceModelDto, UpdateDeviceModelDto } from '@/types/device-models';
-import { Device, CreateDeviceDto, UpdateDeviceDto, StockRefillDto } from '@/types/devices';
+import { Device, CreateDeviceDto, UpdateDeviceDto, StockRefillDto, BulkUploadRelationshipDto, BulkUploadReport, RefillReport } from '@/types/devices';
 import { Customer, CreateCustomerDto, UpdateCustomerDto } from '@/types/customers';
 import { Dispatch, CreateDispatchDto } from '@/types/dispatches';
 import { DeviceTest, StartDeviceTestDto, CompleteDeviceTestDto } from '@/types/device-testing';
@@ -9,16 +9,27 @@ import { DeviceReplacement, CreateDeviceReplacementDto } from '@/types/device-re
 import { InventoryByModelReport, StatusDistributionReport, DispatchReportSummary, DamageReportSummary } from '@/types/reports';
 import { AuditLog } from '@/types/audit';
 import { Promotion, CreatePromotionDto } from '@/types/promotions';
+import { User } from '@/types/users';
+import { RmaRecord, CreateRmaDto as CreateRmaRecordDto } from '@/types/rma';
 import { logger } from '@/lib/logger';
 
 import { authClient } from './auth-client';
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:3000';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: 'An unknown error occurred' }));
-    const errorMessage = errorData.error || errorData.message || response.statusText;
+    let errorMessage = response.statusText;
+    try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+    } catch (e) {
+        // Fallback for non-JSON responses
+        if (response.status === 401) errorMessage = "Session expired. Please login again.";
+        if (response.status === 403) errorMessage = "You do not have permission to perform this action.";
+        if (response.status === 404) errorMessage = "The requested resource was not found.";
+        if (response.status >= 500) errorMessage = "Internal server error. Please try again later.";
+    }
     
     logger.error({
       msg: 'API Request Failed',
@@ -29,7 +40,9 @@ const handleResponse = async (response: Response) => {
 
     throw new Error(errorMessage);
   }
-  return response.json();
+  
+  const text = await response.text();
+  return text ? JSON.parse(text) : {};
 };
 
 const getAuthHeaders = (): Record<string, string> => {
@@ -190,10 +203,19 @@ export const deleteDeviceModel = async (id: string): Promise<{ message: string }
 
 // --- Devices API ---
 
-export const fetchDevices = async (): Promise<Device[]> => {
-
-  const response = await authenticatedFetch(`${API_BASE_URL}/devices`);
-
+export const fetchDevices = async (params?: { status?: string; modelId?: string; search?: string; limit?: number; offset?: number }): Promise<Device[]> => {
+  let url = `${API_BASE_URL}/devices`;
+  if (params) {
+    const searchParams = new URLSearchParams();
+    if (params.status) searchParams.set('status', params.status);
+    if (params.modelId) searchParams.set('modelId', params.modelId);
+    if (params.search) searchParams.set('search', params.search);
+    if (params.limit !== undefined) searchParams.set('limit', String(params.limit));
+    if (params.offset !== undefined) searchParams.set('offset', String(params.offset));
+    const qs = searchParams.toString();
+    if (qs) url += `?${qs}`;
+  }
+  const response = await authenticatedFetch(url);
   return handleResponse(response);
 
 };
@@ -246,19 +268,35 @@ export const deleteDevice = async (id: string): Promise<{ message: string }> => 
 
 
 
-export const refillStock = async (data: StockRefillDto): Promise<Device[]> => {
-
+export const refillStock = async (data: StockRefillDto): Promise<RefillReport> => {
   const response = await authenticatedFetch(`${API_BASE_URL}/devices/refill`, {
-
     method: 'POST',
-
     body: JSON.stringify(data),
-
   });
-
   return handleResponse(response);
-
 };
+
+export const createBulkRelationships = async (data: { primaryIdentifier: string, linkedIdentifier: string }[]): Promise<{ created: number, skipped: number, errors: string[] }> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/devices/relationships/bulk`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+};
+
+export const bulkUploadRelationships = async (data: BulkUploadRelationshipDto): Promise<BulkUploadReport> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/devices/relationships/bulk-upload`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+};
+
+export const fetchDeviceRelationships = async (id: string): Promise<any[]> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/devices/${id}/relationships`);
+  return handleResponse(response);
+};
+
 
 
 
@@ -374,7 +412,7 @@ export const createDispatch = async (data: CreateDispatchDto): Promise<Dispatch>
 
 
 
-export const updateDispatch = async (id: string, data: any): Promise<Dispatch> => {
+export const updateDispatch = async (id: string, data: Pick<CreateDispatchDto, 'location' | 'signOffPath'>): Promise<Dispatch> => {
 
 
 
@@ -586,12 +624,18 @@ export const fetchDamageReportSummary = async (): Promise<DamageReportSummary[]>
 
 // --- Audit API ---
 
-export const fetchAuditLogs = async (): Promise<AuditLog[]> => {
-
-  const response = await authenticatedFetch(`${API_BASE_URL}/audit`);
-
+export const fetchAuditLogs = async (params?: {
+  entity?: string; action?: string; from?: string; to?: string; page?: number; limit?: number;
+}): Promise<{ data: AuditLog[]; total: number; page: number; pages: number }> => {
+  const searchParams = new URLSearchParams();
+  if (params?.entity) searchParams.set('entity', params.entity);
+  if (params?.action) searchParams.set('action', params.action);
+  if (params?.from) searchParams.set('from', params.from);
+  if (params?.to) searchParams.set('to', params.to);
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.limit) searchParams.set('limit', String(params.limit));
+  const response = await authenticatedFetch(`${API_BASE_URL}/audit?${searchParams.toString()}`);
   return handleResponse(response);
-
 };
 
 
@@ -620,4 +664,61 @@ export const createPromotion = async (data: CreatePromotionDto): Promise<Promoti
 
   return handleResponse(response);
 
+};
+
+export const deletePromotion = async (id: string): Promise<{ message: string }> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/promotions/${id}`, { method: 'DELETE' });
+  return handleResponse(response);
+};
+
+// --- Users API ---
+
+export const fetchUsers = async (): Promise<User[]> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/users`);
+  return handleResponse(response);
+};
+
+export const updateUserRole = async (id: string, role: string): Promise<User> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/users/${id}/role`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  });
+  return handleResponse(response);
+};
+
+// --- RMA API ---
+
+export const fetchRmaRecords = async (): Promise<RmaRecord[]> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/rma`);
+  return handleResponse(response);
+};
+
+export const createRmaRecord = async (data: CreateRmaRecordDto): Promise<RmaRecord> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/rma`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+};
+
+// --- Reports Extended API ---
+
+export const fetchTestingSummary = async () => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/reports/testing-summary`);
+  return handleResponse(response);
+};
+
+export const fetchReplacementsSummary = async () => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/reports/replacements-summary`);
+  return handleResponse(response);
+};
+
+export const fetchStockTrend = async () => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/reports/stock-trend`);
+  return handleResponse(response);
+};
+
+export const fetchDispatchTrend = async () => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/reports/dispatch-trend`);
+  return handleResponse(response);
 };

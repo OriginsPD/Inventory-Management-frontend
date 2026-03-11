@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Send, Loader2, Star, Package, Calendar, User, Eye, Search, X, ChevronDown } from 'lucide-react';
+import { Send, Loader2, Star, Package, Calendar, User, Eye, Search, X, ChevronDown, Trash2 } from 'lucide-react';
 
 import {
   ColumnDef,
@@ -18,7 +18,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table"
 
-import { fetchDevices, fetchPromotions, createPromotion } from '@/lib/api';
+import { fetchDevices, fetchPromotions, createPromotion, deletePromotion } from '@/lib/api';
 import { Device } from '@/types/devices';
 import { Promotion } from '@/types/promotions';
 import { Button } from '@/components/ui/button';
@@ -43,6 +43,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from '@/lib/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const formSchema = z.object({
   deviceIds: z.array(z.string()).min(1, 'Select at least one asset'),
@@ -53,9 +63,11 @@ const formSchema = z.object({
 
 export default function PromotionsPage() {
   const [inStockDevices, setInStockDevices] = useState<Device[]>([]);
+  const [allDevices, setAllDevices] = useState<Device[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [assetSearchTerm, setAssetSearchTerm] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Table State
@@ -82,6 +94,7 @@ export default function PromotionsPage() {
           fetchDevices(),
           fetchPromotions(),
         ]);
+        setAllDevices(fetchedDevices);
         setInStockDevices(fetchedDevices.filter(d => d.status === 'IN_STOCK'));
         setPromotions(fetchedPromos);
       } catch (err: any) {
@@ -142,6 +155,7 @@ export default function PromotionsPage() {
       });
 
       const updatedDevices = await fetchDevices();
+      setAllDevices(updatedDevices);
       setInStockDevices(updatedDevices.filter(d => d.status === 'IN_STOCK'));
     } catch (err: any) {
       toast({
@@ -152,18 +166,34 @@ export default function PromotionsPage() {
     }
   }
 
+  async function confirmDelete() {
+    if (!deleteId) return;
+    try {
+      await deletePromotion(deleteId);
+      setPromotions(prev => prev.filter(p => p.id !== deleteId));
+      toast({ title: "Deleted", description: "Promotion record removed." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setDeleteId(null);
+    }
+  }
+
   const columns: ColumnDef<Promotion>[] = [
     {
         accessorKey: "deviceId",
         header: "Asset Record",
-        cell: ({ row }) => (
-            <div className="flex items-center gap-3">
-                <div className="p-2 bg-muted/50 rounded border border-border/50">
-                    <Package className="w-4 h-4 text-primary" />
+        cell: ({ row }) => {
+            const identifier = allDevices.find(d => d.id === row.getValue("deviceId"))?.identifier || row.getValue("deviceId")?.toString().substring(0, 13) + '...';
+            return (
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-muted/50 rounded border border-border/50">
+                        <Package className="w-4 h-4 text-primary" />
+                    </div>
+                    <span className="font-mono text-xs text-zinc-500 uppercase">{identifier}</span>
                 </div>
-                <span className="font-mono text-xs text-zinc-500 uppercase">{row.getValue("deviceId")?.toString().substring(0, 13)}...</span>
-            </div>
-        )
+            );
+        }
     },
     {
         accessorKey: "promotionType",
@@ -208,6 +238,21 @@ export default function PromotionsPage() {
         meta: {
             className: "text-right"
         }
+    },
+    {
+        id: "actions",
+        cell: ({ row }) => (
+            <div className="flex justify-end">
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setDeleteId(row.original.id)}
+                    className="text-zinc-400 hover:text-destructive h-8 w-8"
+                >
+                    <Trash2 className="w-4 h-4" />
+                </Button>
+            </div>
+        )
     }
   ]
 
@@ -495,13 +540,30 @@ export default function PromotionsPage() {
             <div>
                 <h4 className="font-bold text-foreground">Strategic Inventory Note</h4>
                 <p className="text-sm text-zinc-500 mt-1 leading-relaxed">
-                    Promotional units are excluded from active sellable stock calculations. 
+                    Promotional units are excluded from active sellable stock calculations.
                     They retain full serial history for warranty and tracking purposes within the core intelligence engine.
                 </p>
             </div>
           </div>
         </div>
       </div>
+
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent className="bg-card border-border rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-bold">Delete Promotion Record?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove this promotional record. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl font-bold">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-xl font-bold">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

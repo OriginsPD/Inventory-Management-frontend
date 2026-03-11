@@ -64,7 +64,7 @@ export default function WelcomePage() {
         {[
           {
             title: "Turbo-Ingestion",
-            desc: "Mass register hardware via vision-based camera scanning or high-speed hardware nodes.",
+            desc: "Mass register hardware via high-speed hardware HID nodes.",
             icon: Zap,
             color: "text-amber-500",
             bg: "bg-amber-500/10"
