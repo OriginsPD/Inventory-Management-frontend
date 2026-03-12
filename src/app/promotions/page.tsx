@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Send, Loader2, Star, Package, Calendar, User, Eye, Search, X, ChevronDown, Trash2 } from 'lucide-react';
+import { TableActions } from '@/components/ui/table-actions';
 
 import {
   ColumnDef,
@@ -241,17 +242,13 @@ export default function PromotionsPage() {
     },
     {
         id: "actions",
+        size: 60,
+        enableResizing: false,
+        header: () => <span className="sr-only">Actions</span>,
         cell: ({ row }) => (
-            <div className="flex justify-end">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setDeleteId(row.original.id)}
-                    className="text-zinc-400 hover:text-destructive h-8 w-8"
-                >
-                    <Trash2 className="w-4 h-4" />
-                </Button>
-            </div>
+            <TableActions actions={[
+                { icon: Trash2, label: "Delete promotion", onClick: () => setDeleteId(row.original.id), variant: "destructive" },
+            ]} />
         )
     }
   ]

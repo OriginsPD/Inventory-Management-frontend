@@ -18,6 +18,19 @@ export function sanitizeIMEI(input: string): string {
     return sanitized;
 }
 
+/**
+ * Consistent date formatting across the application.
+ * Returns '—' for null/undefined/invalid dates.
+ */
+export function formatDate(value: string | Date | null | undefined, opts?: { includeTime?: boolean }): string {
+  if (!value) return '—';
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (isNaN(d.getTime())) return '—';
+  return opts?.includeTime
+    ? d.toLocaleString('en-ZA', { dateStyle: 'medium', timeStyle: 'short' })
+    : d.toLocaleDateString('en-ZA', { dateStyle: 'medium' });
+}
+
 export function playBeep() {
     if (typeof window === 'undefined') return;
     try {

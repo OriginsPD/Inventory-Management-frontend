@@ -1,6 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
 import { authClient } from "@/lib/auth-client"
 import { fetchAuditLogs } from "@/lib/api"
 import { AuditLog } from "@/types/audit"
@@ -9,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/hooks/use-toast"
-import { cn } from "@/lib/utils"
+import { cn, formatDate } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -19,7 +22,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
+import { EmptyState } from "@/components/ui/empty-state"
+
+const profileSchema = z.object({
+  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  email: z.string().email({ message: "Please enter a valid email address." }),
+})
+
+type ProfileFormValues = z.infer<typeof profileSchema>
 
 export default function ProfilePage() {
   const { data: session, isPending: sessionPending } = authClient.useSession()
@@ -27,11 +45,15 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const { toast } = useToast()
 
-  // Edit dialog state
   const [isEditOpen, setIsEditOpen] = useState(false)
-  const [editName, setEditName] = useState("")
-  const [editEmail, setEditEmail] = useState("")
-  const [isSaving, setIsSaving] = useState(false)
+
+  const form = useForm<ProfileFormValues>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+    },
+  })
 
   useEffect(() => {
     async function loadUserActivity() {
@@ -57,21 +79,20 @@ export default function ProfilePage() {
   }, [session, sessionPending, toast])
 
   const openEditDialog = () => {
-    setEditName(session?.user?.name || "")
-    setEditEmail(session?.user?.email || "")
+    form.reset({
+      name: session?.user?.name || "",
+      email: session?.user?.email || "",
+    })
     setIsEditOpen(true)
   }
 
-  const handleSaveProfile = async () => {
-    setIsSaving(true)
+  const onSubmit = async (values: ProfileFormValues) => {
     try {
-      await (authClient as any).updateUser({ name: editName, email: editEmail })
+      await (authClient as any).updateUser({ name: values.name, email: values.email })
       toast({ title: "Profile Updated", description: "Your profile information has been saved." })
       setIsEditOpen(false)
     } catch (err: any) {
       toast({ title: "Error", description: err.message || "Failed to update profile.", variant: "destructive" })
-    } finally {
-      setIsSaving(false)
     }
   }
 
@@ -138,11 +159,8 @@ export default function ProfilePage() {
                 <TableBody>
                     {logs.length === 0 ? (
                         <TableRow>
-                            <TableCell colSpan={4} className="h-64 text-center text-zinc-500 italic">
-                                <div className="flex flex-col items-center gap-3 opacity-40">
-                                    <Clock className="w-10 h-10" />
-                                    <p>No recorded activity found for this account.</p>
-                                </div>
+                            <TableCell colSpan={4}>
+                                <EmptyState icon={<Clock size={44} />} title="No recorded activity" description="Your account actions will appear here once you make changes." />
                             </TableCell>
                         </TableRow>
                     ) : (
@@ -150,7 +168,7 @@ export default function ProfilePage() {
                             <TableRow key={log.id} className="border-border/40 hover:bg-muted/30 transition-colors">
                                 <TableCell className="pl-6 py-4">
                                     <div className="flex flex-col">
-                                        <span className="text-foreground font-medium text-xs">{new Date(log.performedAt).toLocaleDateString()}</span>
+                                        <span className="text-foreground font-medium text-xs">{formatDate(log.performedAt)}</span>
                                         <span className="text-[10px] text-zinc-400">{new Date(log.performedAt).toLocaleTimeString()}</span>
                                     </div>
                                 </TableCell>
@@ -185,35 +203,62 @@ export default function ProfilePage() {
 
       {/* Edit Profile Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-card border-border">
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">Edit Profile</DialogTitle>
             <DialogDescription>Update your name and email address.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Full Name</Label>
-              <Input
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                className="bg-muted/30 border-border"
-                placeholder="Your full name"
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                      Full Name <span className="text-destructive">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Your full name"
+                        className="bg-muted/30 border-border"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Email Address</Label>
-              <Input
-                value={editEmail}
-                onChange={(e) => setEditEmail(e.target.value)}
-                className="bg-muted/30 border-border"
-                placeholder="your@email.com"
-                type="email"
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                      Email Address <span className="text-destructive">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="your@email.com"
+                        className="bg-muted/30 border-border"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <Button onClick={handleSaveProfile} className="w-full h-11 font-bold mt-4" disabled={isSaving}>
-              {isSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : "Save Changes"}
-            </Button>
-          </div>
+              <Button
+                type="submit"
+                className="w-full h-11 font-bold mt-4"
+                disabled={form.formState.isSubmitting}
+              >
+                {form.formState.isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {form.formState.isSubmitting ? "Saving..." : "Save Changes"}
+              </Button>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>

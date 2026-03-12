@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { RotateCcw, Package, Calendar, User, Loader2, ChevronDown, Search } from "lucide-react"
+import { RotateCcw, Package, Calendar, User, Loader2, ChevronDown, ChevronUp, ChevronsUpDown, Search, PackageSearch } from "lucide-react"
+import { SortableHeader } from "@/components/ui/sortable-header"
 import {
   ColumnDef,
   SortingState,
@@ -31,6 +32,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { Skeleton } from "@/components/ui/skeleton"
+import { formatDate } from "@/lib/utils"
+import { EmptyState } from "@/components/ui/empty-state"
 
 const formSchema = z.object({
   deviceIdentifier: z.string().min(1, "Device identifier is required"),
@@ -104,7 +107,8 @@ export default function RmaPage() {
   const columns: ColumnDef<RmaRecord>[] = [
     {
       accessorKey: "deviceId",
-      header: () => <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Device</span>,
+      size: 160,
+      header: "Device",
       cell: ({ row }) => {
         const device = allDevices.find(d => d.id === row.getValue("deviceId"))
         return (
@@ -117,17 +121,20 @@ export default function RmaPage() {
     },
     {
       accessorKey: "reason",
-      header: () => <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Reason</span>,
+      size: 200,
+      header: "Reason",
       cell: ({ row }) => <span className="text-xs text-foreground">{row.getValue("reason")}</span>
     },
     {
       accessorKey: "vendorReference",
-      header: () => <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Vendor Ref</span>,
+      size: 140,
+      header: "Vendor Ref",
       cell: ({ row }) => <span className="text-xs text-zinc-500">{row.getValue("vendorReference") || "—"}</span>
     },
     {
       accessorKey: "returnedBy",
-      header: () => <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Returned By</span>,
+      size: 140,
+      header: "Returned By",
       cell: ({ row }) => (
         <div className="flex items-center gap-2 text-zinc-500 text-xs">
           <User className="w-3 h-3 opacity-50" /> {row.getValue("returnedBy")}
@@ -136,19 +143,12 @@ export default function RmaPage() {
     },
     {
       accessorKey: "rmaDate",
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="p-0 hover:bg-transparent text-[10px] font-bold uppercase tracking-widest text-zinc-500"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          RMA Date <ChevronDown className="ml-2 h-3 w-3" />
-        </Button>
-      ),
+      size: 120,
+      header: ({ column }) => <SortableHeader column={column} label="RMA Date" />,
       cell: ({ row }) => (
         <div className="flex items-center gap-2 text-zinc-400 text-xs">
           <Calendar className="w-3 h-3 opacity-50" />
-          {new Date(row.getValue("rmaDate")).toLocaleDateString()}
+          {formatDate(row.getValue("rmaDate"))}
         </div>
       )
     }
@@ -313,11 +313,8 @@ export default function RmaPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={columns.length} className="h-64 text-center">
-                        <div className="flex flex-col items-center gap-3 opacity-40 italic text-zinc-500">
-                          <RotateCcw className="h-12 w-12" />
-                          <p>No RMA records found.</p>
-                        </div>
+                      <TableCell colSpan={columns.length}>
+                        <EmptyState icon={<PackageSearch size={44} />} title="No RMA records found" description="Submit an RMA using the form on the left." />
                       </TableCell>
                     </TableRow>
                   )}

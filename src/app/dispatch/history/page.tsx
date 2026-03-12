@@ -17,24 +17,29 @@ import { Dispatch } from '@/types/dispatches';
 import { Device } from '@/types/devices';
 import { Customer } from '@/types/customers';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { 
-    History, 
-    MapPin, 
-    User, 
-    Calendar, 
-    Hash, 
-    Package, 
-    FileText, 
-    Eye, 
-    Trash2, 
-    Edit, 
-    Info, 
-    CheckCircle2, 
+import {
+    History,
+    MapPin,
+    User,
+    Calendar,
+    Hash,
+    Package,
+    FileText,
+    Eye,
+    Trash2,
+    Edit,
+    Info,
+    CheckCircle2,
     ArrowRight,
     Loader2,
     Search,
-    ChevronDown
+    ChevronDown,
+    ChevronUp,
+    ChevronsUpDown,
+    Send
 } from 'lucide-react';
+import { SortableHeader } from '@/components/ui/sortable-header';
+import { TableActions } from '@/components/ui/table-actions';
 
 import {
   ColumnDef,
@@ -50,13 +55,14 @@ import {
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { 
-    Dialog, 
-    DialogContent, 
-    DialogDescription, 
-    DialogHeader, 
-    DialogTitle 
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle
 } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -79,7 +85,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
 
 const editFormSchema = z.object({
   location: z.string().min(2, { message: "Location is required." }),
@@ -194,11 +200,13 @@ export default function DispatchHistoryPage() {
   const columns: ColumnDef<Dispatch>[] = [
     {
         accessorKey: "id",
-        header: "Dispatch ID",
+        size: 90,
+        header: "ID",
         cell: ({ row }) => <span className="font-mono text-[10px] text-zinc-500 uppercase">{row.getValue("id")?.toString().substring(0, 8)}</span>,
     },
     {
         accessorKey: "deviceId",
+        size: 160,
         header: "Primary Asset",
         cell: ({ row }) => (
             <div className="flex items-center gap-2 font-mono text-xs font-bold text-foreground">
@@ -208,57 +216,39 @@ export default function DispatchHistoryPage() {
     },
     {
         accessorKey: "customerId",
-        header: ({ column }) => (
-            <Button
-                variant="ghost"
-                className="p-0 hover:bg-transparent text-[10px] font-bold uppercase tracking-widest text-zinc-500"
-                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            >
-                Recipient
-                <ChevronDown className="ml-2 h-3 w-3" />
-            </Button>
-        ),
+        size: 160,
+        header: ({ column }) => <SortableHeader column={column} label="Recipient" />,
         cell: ({ row }) => <span className="font-bold text-foreground">{getCustomerName(row.getValue("customerId"))}</span>,
     },
     {
         accessorKey: "dispatchDate",
-        header: ({ column }) => (
-            <Button
-                variant="ghost"
-                className="p-0 hover:bg-transparent text-[10px] font-bold uppercase tracking-widest text-zinc-500"
-                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            >
-                Date
-                <ChevronDown className="ml-2 h-3 w-3" />
-            </Button>
-        ),
+        size: 120,
+        header: ({ column }) => <SortableHeader column={column} label="Date" />,
         cell: ({ row }) => (
             <div className="flex items-center gap-2 text-zinc-500 text-xs">
-                <Calendar className="w-3 h-3" /> {new Date(row.getValue("dispatchDate")).toLocaleDateString()}
+                <Calendar className="w-3 h-3" /> {formatDate(row.getValue("dispatchDate"))}
             </div>
         )
     },
     {
         accessorKey: "location",
+        size: 160,
         header: "Location",
         cell: ({ row }) => <span className="text-xs text-zinc-500">{row.getValue("location") || 'N/A'}</span>
     },
     {
         id: "actions",
+        size: 60,
+        enableResizing: false,
+        header: () => <span className="sr-only">Actions</span>,
         cell: ({ row }) => {
             const dispatch = row.original
             return (
-                <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-primary" onClick={() => handleViewDetails(dispatch)}>
-                        <Eye className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-primary" onClick={() => setEditingDispatch(dispatch)}>
-                        <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-destructive" onClick={() => setDeleteId(dispatch.id)}>
-                        <Trash2 className="w-4 h-4" />
-                    </Button>
-                </div>
+                <TableActions actions={[
+                    { icon: Eye, label: "View dispatch", onClick: () => handleViewDetails(dispatch) },
+                    { icon: Edit, label: "Edit dispatch", onClick: () => setEditingDispatch(dispatch) },
+                    { icon: Trash2, label: "Delete dispatch", onClick: () => setDeleteId(dispatch.id), variant: "destructive" },
+                ]} />
             )
         }
     }
@@ -347,7 +337,8 @@ export default function DispatchHistoryPage() {
                 table.getRowModel().rows.map((row) => (
                     <TableRow
                     key={row.id}
-                    className="border-border/40 hover:bg-muted/30 transition-colors"
+                    className="border-border/40 hover:bg-muted/30 transition-colors cursor-pointer"
+                    onClick={() => handleViewDetails(row.original)}
                     >
                     {row.getVisibleCells().map((cell) => (
                         <TableCell key={cell.id} className="py-3">
@@ -396,106 +387,134 @@ export default function DispatchHistoryPage() {
         </div>
       </Card>
 
-      {/* View Details Modal */}
-      <Dialog open={!!viewingDispatch} onOpenChange={(open) => !open && setViewingDispatch(null)}>
-        <DialogContent className="sm:max-w-[500px] bg-card border-border">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-2xl font-bold">
-                <Info className="w-6 h-6 text-primary"/> Dispatch Intelligence
-            </DialogTitle>
-            <DialogDescription>Full bundle breakdown and recipient metadata.</DialogDescription>
-          </DialogHeader>
+      {/* Dispatch Detail Sheet */}
+      <Sheet open={!!viewingDispatch} onOpenChange={(open) => !open && setViewingDispatch(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-[460px] overflow-y-auto p-0">
           {viewingDispatch && (
-            <div className="space-y-6 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 bg-muted/30 border border-border rounded-2xl">
-                        <User className="w-4 h-4 text-primary mb-2 opacity-50" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Recipient</span>
-                        <span className="font-bold text-foreground">{getCustomerName(viewingDispatch.customerId)}</span>
-                    </div>
-                    <div className="p-4 bg-muted/30 border border-border rounded-2xl">
-                        <MapPin className="w-4 h-4 text-primary mb-2 opacity-50" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Destination</span>
-                        <span className="font-bold text-foreground">{viewingDispatch.location || 'N/A'}</span>
-                    </div>
+            <>
+              {/* Header */}
+              <div className="p-6 border-b border-border bg-muted/20">
+                <div className="flex items-start justify-between gap-3 pr-8">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Dispatch Record</span>
+                    <SheetTitle className="font-mono text-lg font-bold text-foreground">{viewingDispatch.id.substring(0, 8).toUpperCase()}</SheetTitle>
+                    <div className="text-xs text-zinc-500">{formatDate(viewingDispatch.dispatchDate, { includeTime: true })}</div>
+                  </div>
+                  <div className="shrink-0 px-2.5 py-1 rounded text-[10px] font-black tracking-tighter uppercase border bg-primary/10 text-primary border-primary/20">
+                    DISPATCHED
+                  </div>
                 </div>
+              </div>
 
+              <div className="p-6 space-y-6">
+                {/* Dispatch Info */}
                 <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Bundle Contents</h4>
-                        <Badge variant="outline" className="text-[10px] font-mono">ID: {viewingDispatch.id.substring(0, 8)}</Badge>
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Dispatch Info</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Recipient</span>
+                      <span className="text-sm font-bold text-foreground">{getCustomerName(viewingDispatch.customerId)}</span>
                     </div>
-                    <div className="border border-border rounded-2xl overflow-hidden bg-muted/10">
-                        {isItemsLoading ? (
-                            <div className="p-8 flex flex-col items-center justify-center gap-2">
-                                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                                <span className="text-xs text-zinc-500 font-medium">Indexing bundle nodes...</span>
-                            </div>
-                        ) : (
-                            <div className="max-h-[200px] overflow-y-auto divide-y divide-border">
-                                {viewingItems.map(item => (
-                                    <div key={item.id} className="p-3 flex items-center justify-between hover:bg-muted/30 transition-colors">
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-1.5 bg-primary/10 rounded-lg">
-                                                <Package className="w-3 h-3 text-primary" />
-                                            </div>
-                                            <span className="font-mono text-xs font-bold text-foreground">{item.identifier}</span>
-                                        </div>
-                                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">Verified</span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                    <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Destination</span>
+                      <span className="text-sm font-bold text-foreground">{viewingDispatch.location || '—'}</span>
                     </div>
+                    <div className="p-3 bg-muted/30 rounded-xl border border-border col-span-2">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Dispatched By</span>
+                      <span className="text-sm font-bold text-foreground">{viewingDispatch.dispatchedBy}</span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="p-4 bg-primary/5 border border-dashed border-primary/20 rounded-2xl space-y-3">
-                    <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-primary uppercase">Logistics Signature</span>
-                        <CheckCircle2 className="w-4 h-4 text-primary" />
-                    </div>
-                    <div className="grid grid-cols-1 gap-4">
-                        <div className="flex items-center justify-between bg-card p-3 border border-border rounded-xl">
-                            <div>
-                                <span className="text-zinc-400 block text-[10px] uppercase font-bold mb-1">Reference / Proof</span>
-                                {viewingDispatch.signOffPath?.startsWith('FILE: ') ? (
-                                    <div className="flex items-center gap-2">
-                                        <FileText className="w-4 h-4 text-primary" />
-                                        <span className="text-xs font-bold text-foreground">{viewingDispatch.signOffPath.replace('FILE: ', '')}</span>
-                                    </div>
-                                ) : (
-                                    <span className="text-foreground font-mono font-bold">{viewingDispatch.signOffPath || 'N/A'}</span>
-                                )}
+                {/* Bundle Contents */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Bundle Contents</h4>
+                    {!isItemsLoading && (
+                      <span className="text-[10px] font-bold text-zinc-500">{viewingItems.length} asset{viewingItems.length !== 1 ? 's' : ''}</span>
+                    )}
+                  </div>
+                  <div className="border border-border rounded-xl overflow-hidden bg-muted/10">
+                    {isItemsLoading ? (
+                      <div className="p-8 flex flex-col items-center justify-center gap-2">
+                        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                        <span className="text-xs text-zinc-500 font-medium">Loading bundle...</span>
+                      </div>
+                    ) : viewingItems.length === 0 ? (
+                      <div className="p-8 text-center text-xs text-zinc-500 italic">No items in this bundle.</div>
+                    ) : (
+                      <div className="divide-y divide-border">
+                        {viewingItems.map(item => (
+                          <div key={item.id} className="p-3 flex items-center justify-between hover:bg-muted/30 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className="p-1.5 bg-primary/10 rounded-lg">
+                                <Package className="w-3 h-3 text-primary" />
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="font-mono text-xs font-bold text-foreground">{item.identifier}</span>
+                                <span className="text-[9px] text-zinc-500 uppercase font-bold">{(item as any).assetType?.replace(/_/g, ' ')}</span>
+                              </div>
                             </div>
-                            {viewingDispatch.signOffPath?.startsWith('FILE: ') && (
-                                <Button 
-                                    size="sm" 
-                                    className="h-8 text-[10px] font-bold uppercase tracking-widest px-4"
-                                    onClick={() => {
-                                        const filename = viewingDispatch.signOffPath?.replace('FILE: ', '') || 'proof.pdf';
-                                        window.open(`${API_BASE_URL}/proof/${filename}`, '_blank');
-                                    }}
-                                >
-                                    View PDF Proof
-                                </Button>
-                            )}
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-xs pt-2">
-                        <div>
-                            <span className="text-zinc-400 block text-[10px] uppercase font-bold mb-1">Dispatched By</span>
-                            <span className="text-foreground font-bold">{viewingDispatch.dispatchedBy}</span>
-                        </div>
-                        <div className="text-right">
-                            <span className="text-zinc-400 block text-[10px] uppercase font-bold mb-1">System Timestamp</span>
-                            <span className="text-foreground font-mono">{new Date(viewingDispatch.dispatchDate).toLocaleString()}</span>
-                        </div>
-                    </div>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-            </div>
+
+                {/* Sign-off */}
+                {viewingDispatch.signOffPath && (
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Sign-off Proof</h4>
+                    <div className="flex items-center justify-between p-3 bg-primary/5 border border-primary/10 rounded-xl">
+                      {viewingDispatch.signOffPath.startsWith('FILE: ') ? (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-primary" />
+                            <span className="text-xs font-bold text-foreground">{viewingDispatch.signOffPath.replace('FILE: ', '')}</span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-[10px] font-bold"
+                            onClick={() => {
+                              const filename = viewingDispatch.signOffPath?.replace('FILE: ', '') || 'proof.pdf';
+                              window.open(`${API_BASE_URL}/proof/${filename}`, '_blank');
+                            }}
+                          >
+                            View PDF
+                          </Button>
+                        </>
+                      ) : (
+                        <span className="text-sm font-mono font-bold text-foreground">{viewingDispatch.signOffPath}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="pt-2 border-t border-border flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1 font-bold"
+                    onClick={() => { setViewingDispatch(null); setEditingDispatch(viewingDispatch); }}
+                  >
+                    <Edit className="w-4 h-4 mr-2" /> Edit Metadata
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="font-bold"
+                    onClick={() => { setViewingDispatch(null); setDeleteId(viewingDispatch.id); }}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       {/* Edit Modal */}
       <Dialog open={!!editingDispatch} onOpenChange={(open) => !open && setEditingDispatch(null)}>

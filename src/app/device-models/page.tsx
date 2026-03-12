@@ -15,8 +15,14 @@ import {
     Info,
     Search,
     ChevronDown,
-    Layers
+    ChevronUp,
+    ChevronsUpDown,
+    Layers,
+    PackageSearch,
+    Loader2
 } from "lucide-react"
+import { SortableHeader } from "@/components/ui/sortable-header"
+import { TableActions } from "@/components/ui/table-actions"
 
 import {
   ColumnDef,
@@ -84,7 +90,8 @@ import {
 import { fetchDeviceModels, createDeviceModel, deleteDeviceModel, updateDeviceModel } from "@/lib/api"
 import { DeviceModel } from "@/types/device-models"
 import { useToast } from "@/hooks/use-toast"
-import { cn } from "@/lib/utils"
+import { cn, formatDate } from "@/lib/utils"
+import { EmptyState } from "@/components/ui/empty-state"
 
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -230,38 +237,19 @@ export default function DeviceModelsPage() {
   const columns: ColumnDef<DeviceModel>[] = [
     {
       accessorKey: "name",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            className="p-0 hover:bg-transparent text-[10px] font-bold uppercase tracking-widest text-zinc-500"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Model Name
-            <ChevronDown className="ml-2 h-3 w-3" />
-          </Button>
-        )
-      },
+      size: 200,
+      header: ({ column }) => <SortableHeader column={column} label="Model Name" />,
       cell: ({ row }) => <div className="font-bold text-foreground text-sm">{row.getValue("name")}</div>,
     },
     {
       accessorKey: "brand",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            className="p-0 hover:bg-transparent text-[10px] font-bold uppercase tracking-widest text-zinc-500"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Manufacturer
-            <ChevronDown className="ml-2 h-3 w-3" />
-          </Button>
-        )
-      },
+      size: 160,
+      header: ({ column }) => <SortableHeader column={column} label="Manufacturer" />,
       cell: ({ row }) => <div className="text-zinc-500 text-sm">{row.getValue("brand")}</div>,
     },
     {
       accessorKey: "assetType",
+      size: 130,
       header: "Classification",
       cell: ({ row }) => {
         const type = row.getValue("assetType") as string
@@ -279,40 +267,23 @@ export default function DeviceModelsPage() {
     },
     {
       accessorKey: "category",
+      size: 120,
       header: "Category",
       cell: ({ row }) => <div className="text-zinc-400 text-xs">{row.getValue("category") || "General"}</div>,
     },
     {
       id: "actions",
+      size: 60,
+      enableResizing: false,
+      header: () => <span className="sr-only">Actions</span>,
       cell: ({ row }) => {
         const model = row.original
         return (
-          <div className="flex justify-end gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setViewingModel(model)}
-              className="text-zinc-400 hover:text-primary h-8 w-8"
-            >
-              <Eye className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setEditingModel(model)}
-              className="text-zinc-400 hover:text-primary h-8 w-8"
-            >
-              <Edit className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setDeleteId(model.id)}
-              className="text-zinc-400 hover:text-destructive h-8 w-8"
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          </div>
+          <TableActions actions={[
+            { icon: Eye, label: "View model", onClick: () => setViewingModel(model) },
+            { icon: Edit, label: "Edit model", onClick: () => setEditingModel(model) },
+            { icon: Trash2, label: "Delete model", onClick: () => setDeleteId(model.id), variant: "destructive" },
+          ]} />
         )
       },
     },
@@ -466,7 +437,10 @@ export default function DeviceModelsPage() {
                     </FormItem>
                   )}
                 />
-                <Button type="submit" className="w-full h-12 mt-4 font-bold shadow-lg shadow-primary/10">Create Model Blueprint</Button>
+                <Button type="submit" disabled={form.formState.isSubmitting} className="w-full h-12 mt-4 font-bold shadow-lg shadow-primary/10">
+                  {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {form.formState.isSubmitting ? 'Creating...' : 'Create Model Blueprint'}
+                </Button>
               </form>
             </Form>
           </DialogContent>
@@ -546,11 +520,8 @@ export default function DeviceModelsPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={columns.length} className="h-64 text-center">
-                        <div className="flex flex-col items-center gap-3 opacity-40 italic text-zinc-500">
-                            <Package className="h-12 w-12" />
-                            <p>No model definitions found.</p>
-                        </div>
+                    <TableCell colSpan={columns.length}>
+                      <EmptyState icon={<PackageSearch size={44} />} title="No model definitions found" description="Create your first device model to get started." />
                     </TableCell>
                   </TableRow>
                 )}
@@ -720,7 +691,10 @@ export default function DeviceModelsPage() {
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full h-12 mt-4 font-bold shadow-lg shadow-primary/10">Save Blueprint Updates</Button>
+              <Button type="submit" disabled={editForm.formState.isSubmitting} className="w-full h-12 mt-4 font-bold shadow-lg shadow-primary/10">
+                {editForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {editForm.formState.isSubmitting ? 'Saving...' : 'Save Blueprint Updates'}
+              </Button>
             </form>
           </Form>
         </DialogContent>

@@ -4,20 +4,26 @@ import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { 
-    UserPlus, 
-    Mail, 
-    Phone, 
-    Trash2, 
-    Edit, 
-    Eye, 
-    User, 
-    Fingerprint, 
-    Calendar, 
+import {
+    UserPlus,
+    Mail,
+    Phone,
+    Trash2,
+    Edit,
+    Eye,
+    User,
+    Fingerprint,
+    Calendar,
     Briefcase,
     Search,
-    ChevronDown
+    ChevronDown,
+    ChevronUp,
+    ChevronsUpDown,
+    Loader2,
+    Users
 } from "lucide-react"
+import { SortableHeader } from "@/components/ui/sortable-header"
+import { TableActions } from "@/components/ui/table-actions"
 
 import {
   ColumnDef,
@@ -77,8 +83,8 @@ import {
 import { fetchCustomers, createCustomer, deleteCustomer, updateCustomer } from "@/lib/api"
 import { Customer } from "@/types/customers"
 import { useToast } from "@/hooks/use-toast"
-import { cn } from "@/lib/utils"
-
+import { cn, formatDate } from "@/lib/utils"
+import { EmptyState } from "@/components/ui/empty-state"
 import { Skeleton } from "@/components/ui/skeleton"
 
 const formSchema = z.object({
@@ -183,18 +189,8 @@ export default function CustomersPage() {
   const columns: ColumnDef<Customer>[] = [
     {
       accessorKey: "name",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            className="p-0 hover:bg-transparent text-[10px] font-bold uppercase tracking-widest text-zinc-500"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Customer
-            <ChevronDown className="ml-2 h-3 w-3" />
-          </Button>
-        )
-      },
+      size: 200,
+      header: ({ column }) => <SortableHeader column={column} label="Customer" />,
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs">
@@ -206,7 +202,8 @@ export default function CustomersPage() {
     },
     {
       id: "contact",
-      header: () => <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Contact Details</span>,
+      size: 220,
+      header: "Contact Details",
       cell: ({ row }) => {
         const email = row.original.email
         const phone = row.original.phone
@@ -228,49 +225,23 @@ export default function CustomersPage() {
     },
     {
       accessorKey: "createdAt",
-      header: ({ column }) => (
-        <Button
-            variant="ghost"
-            className="p-0 hover:bg-transparent text-[10px] font-bold uppercase tracking-widest text-zinc-500"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-            Joined
-            <ChevronDown className="ml-2 h-3 w-3" />
-        </Button>
-      ),
-      cell: ({ row }) => <div className="text-zinc-400 text-xs">{new Date(row.getValue("createdAt")).toLocaleDateString()}</div>,
+      size: 120,
+      header: ({ column }) => <SortableHeader column={column} label="Joined" />,
+      cell: ({ row }) => <div className="text-zinc-400 text-xs">{formatDate(row.getValue("createdAt"))}</div>,
     },
     {
       id: "actions",
+      size: 60,
+      enableResizing: false,
+      header: () => <span className="sr-only">Actions</span>,
       cell: ({ row }) => {
         const customer = row.original
         return (
-          <div className="flex justify-end gap-1">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => setViewingCustomer(customer)}
-              className="text-zinc-400 hover:text-primary h-8 w-8"
-            >
-              <Eye className="w-4 h-4" />
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => setEditingCustomer(customer)}
-              className="text-zinc-400 hover:text-primary h-8 w-8"
-            >
-              <Edit className="w-4 h-4" />
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => setDeleteId(customer.id)}
-              className="text-zinc-400 hover:text-destructive h-8 w-8"
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          </div>
+          <TableActions actions={[
+            { icon: Eye, label: "View customer", onClick: () => setViewingCustomer(customer) },
+            { icon: Edit, label: "Edit customer", onClick: () => setEditingCustomer(customer) },
+            { icon: Trash2, label: "Delete customer", onClick: () => setDeleteId(customer.id), variant: "destructive" },
+          ]} />
         )
       },
     },
@@ -343,7 +314,7 @@ export default function CustomersPage() {
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Full Name / Company Name</FormLabel>
+                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Full Name / Company Name <span className="text-destructive">*</span></FormLabel>
                       <FormControl>
                         <Input placeholder="Acme Corporation" className="bg-muted/30 border-border h-11" {...field} />
                       </FormControl>
@@ -378,7 +349,10 @@ export default function CustomersPage() {
                   )}
                 />
                 <div className="pt-4">
-                  <Button type="submit" className="w-full h-14 font-bold text-lg shadow-xl shadow-primary/10">Register Customer</Button>
+                  <Button type="submit" disabled={form.formState.isSubmitting} className="w-full h-14 font-bold text-lg shadow-xl shadow-primary/10">
+                    {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {form.formState.isSubmitting ? 'Registering...' : 'Register Customer'}
+                  </Button>
                 </div>
               </form>
             </Form>
@@ -440,11 +414,8 @@ export default function CustomersPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={columns.length} className="h-64 text-center">
-                      <div className="flex flex-col items-center gap-3 opacity-40 italic text-zinc-500">
-                          <User className="h-12 w-12" />
-                          <p>No customers found matching criteria.</p>
-                      </div>
+                  <TableCell colSpan={columns.length}>
+                    <EmptyState icon={<Users size={44} />} title="No customers found" description="Add your first customer using the button above." />
                   </TableCell>
                 </TableRow>
               )}
@@ -612,7 +583,10 @@ export default function CustomersPage() {
                 )}
               />
               <div className="pt-4 border-t border-border">
-                <Button type="submit" className="w-full h-14 font-bold text-lg shadow-xl shadow-primary/10">Update Profile</Button>
+                <Button type="submit" disabled={editForm.formState.isSubmitting} className="w-full h-14 font-bold text-lg shadow-xl shadow-primary/10">
+                  {editForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {editForm.formState.isSubmitting ? 'Saving...' : 'Update Profile'}
+                </Button>
               </div>
             </form>
           </Form>

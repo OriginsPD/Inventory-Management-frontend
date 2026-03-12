@@ -38,6 +38,7 @@ import {
   FileText,
   FileSpreadsheet
 } from "lucide-react"
+import { TableActions } from "@/components/ui/table-actions"
 
 import {
   ColumnDef,
@@ -290,29 +291,28 @@ export default function ReportsPage() {
     },
     {
       id: "actions",
-      header: () => <div className="text-right">Action</div>,
+      size: 60,
+      enableResizing: false,
+      header: () => <span className="sr-only">Actions</span>,
       cell: ({ row }) => (
-        <div className="text-right">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-8 w-8 text-zinc-600 hover:text-foreground"
-            onClick={async () => {
-        setSelectedReport({ type: "dispatch", data: row.original });
-        setIsLoadingItems(true);
-        try {
-          const items = await fetchDispatchItems(row.original.id);
-          setDispatchItems(items);
-        } catch {
-          setDispatchItems([]);
-        } finally {
-          setIsLoadingItems(false);
-        }
-      }}
-          >
-            <Eye className="w-4 h-4" />
-          </Button>
-        </div>
+        <TableActions actions={[
+          {
+            icon: Eye,
+            label: "View report",
+            onClick: async () => {
+              setSelectedReport({ type: "dispatch", data: row.original });
+              setIsLoadingItems(true);
+              try {
+                const items = await fetchDispatchItems(row.original.id);
+                setDispatchItems(items);
+              } catch {
+                setDispatchItems([]);
+              } finally {
+                setIsLoadingItems(false);
+              }
+            },
+          },
+        ]} />
       ),
     },
   ], [allCustomers]);

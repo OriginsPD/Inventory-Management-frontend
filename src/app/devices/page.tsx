@@ -4,31 +4,34 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { 
-  Plus, 
-  Package, 
-  Trash2, 
-  Search, 
-  Filter, 
-  Edit, 
-  Eye, 
-  Smartphone, 
-  ShieldCheck, 
+import {
+  Plus,
+  Package,
+  Trash2,
+  Search,
+  Filter,
+  Edit,
+  Eye,
+  Smartphone,
+  ShieldCheck,
   FileUp,
   Loader2,
   ArrowRight,
   X,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
   Wifi,
   Bell,
   Layers,
   Link,
-  MoreHorizontal,
   Info,
   Fingerprint,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  PackageSearch
 } from "lucide-react"
 import { useDropzone } from "react-dropzone"
 import * as XLSX from "xlsx"
@@ -96,14 +99,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
+import { SortableHeader } from "@/components/ui/sortable-header"
+import { TableActions } from "@/components/ui/table-actions"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -115,9 +113,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { fetchDevices, createDevice, deleteDevice, fetchDeviceModels, updateDevice, refillStock, bulkUploadRelationships, fetchDeviceRelationships } from "@/lib/api"
 import { Device, BulkUploadReport, RefillReport } from "@/types/devices"
 import { DeviceModel } from "@/types/device-models"
-import { cn, playBeep, sanitizeIMEI } from "@/lib/utils"
+import { cn, playBeep, sanitizeIMEI, formatDate } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
+import { EmptyState } from "@/components/ui/empty-state"
 
 const formSchema = z.object({
   identifier: z.string().min(1, { message: "Identifier is required." }),
@@ -293,16 +292,65 @@ export default function DevicesPage() {
   const addManualIdentifier = () => {
     const sanitized = sanitizeIMEI(manualIdentifier);
     if (!sanitized) return;
+
+    // Bug 2 fix: return early if already in queue — do NOT add the duplicate
     if (stagedDevices.find(d => d.identifier === sanitized)) {
-        toast({ title: "Duplicate", description: "This ID is already staged.", variant: "destructive" })
+        toast({ title: "Duplicate Entry", description: `${sanitized} is already in the queue.`, variant: "destructive" })
         setManualIdentifier("")
         setTimeout(() => manualInputRef.current?.focus(), 10);
-        return
+        return;
     }
+
     playBeep();
     setStagedDevices((prev) => [{ identifier: sanitized, id: crypto.randomUUID() }, ...prev])
     setManualIdentifier("")
     setTimeout(() => manualInputRef.current?.focus(), 10);
+  }
+
+  // Identify duplicate identifiers within the queue
+  const duplicateIds = useMemo(() => {
+    const counts = stagedDevices.reduce((acc, curr) => {
+      acc[curr.identifier] = (acc[curr.identifier] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    return new Set(Object.keys(counts).filter(id => counts[id] > 1));
+  }, [stagedDevices]);
+
+  const hasDuplicates = duplicateIds.size > 0;
+
+  const resolveDuplicates = () => {
+    const seen = new Set();
+    const unique = stagedDevices.filter(d => {
+      if (seen.has(d.identifier)) return false;
+      seen.add(d.identifier);
+      return true;
+    });
+    setStagedDevices(unique);
+    toast({ title: "Duplicates Resolved", description: `Cleaned queue to ${unique.length} unique assets.` });
+  }
+
+  // Identify duplicate pairs within the Link queue
+  const duplicateLinkIds = useMemo(() => {
+    const counts = stagedLinks.reduce((acc, curr) => {
+      const key = `${curr.primaryIdentifier}-${curr.linkedIdentifier}`;
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    return new Set(Object.keys(counts).filter(id => counts[id] > 1));
+  }, [stagedLinks]);
+
+  const hasLinkDuplicates = duplicateLinkIds.size > 0;
+
+  const resolveLinkDuplicates = () => {
+    const seen = new Set();
+    const unique = stagedLinks.filter(l => {
+      const key = `${l.primaryIdentifier}-${l.linkedIdentifier}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    setStagedLinks(unique);
+    toast({ title: "Link Duplicates Resolved", description: `Cleaned queue to ${unique.length} unique pairs.` });
   }
 
   async function processImport() {
@@ -365,15 +413,23 @@ export default function DevicesPage() {
     const file = acceptedFiles[0]
     const reader = new FileReader()
     reader.onload = (e) => {
-      const data = e.target?.result
-      const workbook = XLSX.read(data, { type: "binary" })
-      const parsedData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[]
-      const newLinks = parsedData.map((row) => ({
-          primaryIdentifier: String(row["tracker_imei"] || row["IMEI"] || row["identifier"] || "").trim(),
-          linkedIdentifier: String(row["sim_iccid"] || row["ICCID"] || row["linked_identifier"] || "").trim(),
-          id: crypto.randomUUID(),
-      })).filter((l) => l.primaryIdentifier.length >= 3 && l.linkedIdentifier.length >= 3)
-      setStagedLinks((prev) => [...newLinks, ...prev])
+      try {
+        const data = e.target?.result
+        const workbook = XLSX.read(data, { type: "binary" })
+        const parsedData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[]
+        const newLinks = parsedData.map((row) => ({
+            primaryIdentifier: String(row["tracker_imei"] || row["IMEI"] || row["identifier"] || "").trim(),
+            linkedIdentifier: String(row["sim_iccid"] || row["ICCID"] || row["linked_identifier"] || "").trim(),
+            id: crypto.randomUUID(),
+        })).filter((l) => l.primaryIdentifier.length >= 3 && l.linkedIdentifier.length >= 3)
+        if (parsedData.length > 0 && newLinks.length === 0) {
+          toast({ title: "No Valid Rows Found", description: "Ensure your file has 'tracker_imei' and 'sim_iccid' column headers.", variant: "destructive" })
+        } else {
+          setStagedLinks((prev) => [...newLinks, ...prev])
+        }
+      } catch {
+        toast({ title: "File Read Error", description: "Could not parse the file. Ensure it is a valid .xlsx or .csv.", variant: "destructive" })
+      }
     }
     reader.readAsBinaryString(file)
   }
@@ -388,14 +444,22 @@ export default function DevicesPage() {
     const file = acceptedFiles[0]
     const reader = new FileReader()
     reader.onload = (e) => {
-      const data = e.target?.result
-      const workbook = XLSX.read(data, { type: "binary" })
-      const parsedData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[]
-      const newDevices = parsedData.map((row) => ({
-          identifier: String(row.IMEI || row.identifier || row.imei || "").trim(),
-          id: crypto.randomUUID(),
-      })).filter((d) => d.identifier.length >= 3)
-      setStagedDevices((prev) => [...newDevices, ...prev])
+      try {
+        const data = e.target?.result
+        const workbook = XLSX.read(data, { type: "binary" })
+        const parsedData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[]
+        const newDevices = parsedData.map((row) => ({
+            identifier: String(row.IMEI || row.identifier || row.imei || "").trim(),
+            id: crypto.randomUUID(),
+        })).filter((d) => d.identifier.length >= 3)
+        if (parsedData.length > 0 && newDevices.length === 0) {
+          toast({ title: "No Valid Rows Found", description: "Ensure your file has an 'IMEI' or 'identifier' column header.", variant: "destructive" })
+        } else {
+          setStagedDevices((prev) => [...newDevices, ...prev])
+        }
+      } catch {
+        toast({ title: "File Read Error", description: "Could not parse the file. Ensure it is a valid .xlsx or .csv.", variant: "destructive" })
+      }
     }
     reader.readAsBinaryString(file)
   }
@@ -461,16 +525,18 @@ export default function DevicesPage() {
   const columns: ColumnDef<Device>[] = [
     {
       id: "select",
+      size: 40,
       header: ({ table }) => <Checkbox checked={table.getIsAllPageRowsSelected()} onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)} />,
-      cell: ({ row }) => <Checkbox checked={row.getIsSelected()} onCheckedChange={(v) => row.toggleSelected(!!v)} />,
+      cell: ({ row }) => <div onClick={(e) => e.stopPropagation()}><Checkbox checked={row.getIsSelected()} onCheckedChange={(v) => row.toggleSelected(!!v)} /></div>,
     },
-    { accessorKey: "identifier", header: "Asset ID / IMEI", cell: ({ row }) => <div className="font-mono text-xs font-bold">{row.getValue("identifier")}</div> },
-    { accessorKey: "assetType", header: "Type", cell: ({ row }) => <div className="text-[10px] font-bold text-zinc-400">{row.getValue("assetType")}</div> },
-    { accessorKey: "modelName", header: "Hardware Model", cell: ({ row }) => <div className="font-medium">{row.getValue("modelName")}</div> },
-    { accessorKey: "brand", header: "Manufacturer", cell: ({ row }) => <div className="text-zinc-500 text-xs">{row.getValue("brand")}</div> },
+    { accessorKey: "identifier", size: 160, header: ({ column }) => <SortableHeader column={column} label="Asset ID / IMEI" />, cell: ({ row }) => <div className="font-mono text-xs font-bold">{row.getValue("identifier")}</div> },
+    { accessorKey: "assetType", size: 100, header: "Type", cell: ({ row }) => <div className="text-[10px] font-bold text-zinc-400">{row.getValue("assetType")}</div> },
+    { accessorKey: "modelName", size: 180, header: ({ column }) => <SortableHeader column={column} label="Hardware Model" />, cell: ({ row }) => <div className="font-medium">{row.getValue("modelName")}</div> },
+    { accessorKey: "brand", size: 140, header: "Manufacturer", cell: ({ row }) => <div className="text-zinc-500 text-xs">{row.getValue("brand")}</div> },
     {
       accessorKey: "status",
-      header: "Current State",
+      size: 120,
+      header: ({ column }) => <SortableHeader column={column} label="Current State" />,
       cell: ({ row }) => {
         const status = row.getValue("status") as string
         return (
@@ -488,6 +554,7 @@ export default function DevicesPage() {
     },
     {
       accessorKey: "pairedDeviceId",
+      size: 80,
       header: "Linkage",
       cell: ({ row }) => {
         const pairedId = row.getValue("pairedDeviceId");
@@ -502,36 +569,17 @@ export default function DevicesPage() {
     },
     {
       id: "actions",
+      size: 60,
+      enableResizing: false,
+      header: () => <span className="sr-only">Actions</span>,
       cell: ({ row }) => {
         const device = row.original
         return (
-          <div className="flex justify-end">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-muted">
-                  <span className="sr-only">Open menu</span>
-                  <MoreHorizontal className="h-4 w-4 text-zinc-500" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[160px] bg-card border-border shadow-xl">
-                <DropdownMenuLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Management</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setViewingDevice(device)} className="cursor-pointer">
-                  <Eye className="mr-2 h-3.5 w-3.5 text-primary" />
-                  <span>View Profile</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setEditingDevice(device)} className="cursor-pointer">
-                  <Edit className="mr-2 h-3.5 w-3.5 text-zinc-500" />
-                  <span>Edit Details</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setDeleteId(device.id)} className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50">
-                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                  <span>Delete Asset</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <TableActions actions={[
+            { icon: Eye, label: "View profile", onClick: () => setViewingDevice(device) },
+            { icon: Edit, label: "Edit details", onClick: () => setEditingDevice(device) },
+            { icon: Trash2, label: "Delete asset", onClick: () => setDeleteId(device.id), variant: "destructive" },
+          ]} />
         )
       },
     },
@@ -594,8 +642,18 @@ export default function DevicesPage() {
               <div className="py-6">
                 <Tabs defaultValue="INGEST" onValueChange={(v) => setBatchMode(v as 'INGEST' | 'LINK')}>
                   <TabsList className="grid w-full grid-cols-2 mb-6">
-                    <TabsTrigger value="INGEST" className="font-bold text-xs uppercase tracking-widest"><Package className="mr-2 h-4 w-4" /> Ingest Assets</TabsTrigger>
-                    <TabsTrigger value="LINK" className="font-bold text-xs uppercase tracking-widest"><Link className="mr-2 h-4 w-4" /> Link Devices</TabsTrigger>
+                    <TabsTrigger value="INGEST" className="font-bold text-xs uppercase tracking-widest">
+                      <Package className="mr-2 h-4 w-4" /> Ingest Assets
+                      {stagedDevices.length > 0 && (
+                        <span className="ml-2 bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 text-[9px] font-black leading-none">{stagedDevices.length}</span>
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger value="LINK" className="font-bold text-xs uppercase tracking-widest">
+                      <Link className="mr-2 h-4 w-4" /> Link Devices
+                      {stagedLinks.length > 0 && (
+                        <span className="ml-2 bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 text-[9px] font-black leading-none">{stagedLinks.length}</span>
+                      )}
+                    </TabsTrigger>
                   </TabsList>
 
                   {/* === INGEST TAB === */}
@@ -672,11 +730,14 @@ export default function DevicesPage() {
                                                 </button>
                                             </div>
 
-                                            <div {...getRootProps()} className={cn("border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer mb-4", isDragActive ? "border-primary bg-primary/5 scale-[0.98]" : "border-border hover:border-zinc-400 hover:bg-muted/30")}>
+                                            <div {...getRootProps()} className={cn("border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer mb-2", isDragActive ? "border-primary bg-primary/5 scale-[0.98]" : "border-border hover:border-zinc-400 hover:bg-muted/30")}>
                                                 <input {...getInputProps()} />
                                                 <div className="bg-primary/10 w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2"><FileUp className="h-5 w-5 text-primary" /></div>
                                                 <p className="text-xs font-bold text-foreground">Drop Excel/CSV here</p>
                                             </div>
+                                            <p className="text-[9px] text-zinc-500 font-medium mb-4 leading-relaxed">
+                                              Accepted column: <code className="bg-muted px-1 rounded">IMEI</code> / <code className="bg-muted px-1 rounded">identifier</code> / <code className="bg-muted px-1 rounded">imei</code>
+                                            </p>
 
                                             <div className="relative mb-4"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div><div className="relative flex justify-center text-[10px] uppercase"><span className="bg-card px-2 text-zinc-500 font-bold">Or Hardware Scanner</span></div></div>
                                             <div className="flex gap-2">
@@ -701,19 +762,37 @@ export default function DevicesPage() {
                                 <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
                                     Staging Queue ({stagedDevices.length})
                                 </h4>
-                                {stagedDevices.length > 0 && (
-                                    <button onClick={() => setStagedDevices([])} className="text-[10px] text-red-500 font-bold hover:underline">Clear Queue</button>
-                                )}
+                                <div className="flex items-center gap-3">
+                                    {/* Bug 3 fix: expose the resolve button when duplicates exist */}
+                                    {hasDuplicates && (
+                                        <button onClick={resolveDuplicates} className="text-[10px] text-amber-500 font-bold hover:underline flex items-center gap-1">
+                                            <AlertTriangle className="w-3 h-3" /> {duplicateIds.size} duplicate{duplicateIds.size > 1 ? 's' : ''} — Resolve
+                                        </button>
+                                    )}
+                                    {stagedDevices.length > 0 && (
+                                        <button onClick={() => setStagedDevices([])} className="text-[10px] text-red-500 font-bold hover:underline">Clear Queue</button>
+                                    )}
+                                </div>
                             </div>
                             <div className="flex-1 overflow-y-auto pr-2 space-y-2 border border-border rounded-xl p-2 bg-muted/10">
                                 {stagedDevices.length === 0 ? (
                                     <div className="h-full flex flex-col items-center justify-center text-zinc-500 italic text-xs gap-2"><Package className="h-8 w-8 opacity-20" /><span>No assets staged</span></div>
                                 ) : (
                                     stagedDevices.map((d) => (
-                                        <div key={d.id} className="flex items-center justify-between p-3 bg-card border border-border rounded-xl group animate-in slide-in-from-right-2 shadow-sm">
+                                        // Gap 1 fix: highlight duplicate rows amber
+                                        <div key={d.id} className={cn(
+                                            "flex items-center justify-between p-3 bg-card border rounded-xl group animate-in slide-in-from-right-2 shadow-sm",
+                                            duplicateIds.has(d.identifier)
+                                                ? "border-amber-400/60 bg-amber-50/30"
+                                                : "border-border"
+                                        )}>
                                             <div className="flex flex-col">
                                                 <span className="font-mono text-xs font-bold text-foreground">{d.identifier}</span>
-                                                <span className="text-[9px] text-zinc-400 uppercase font-black tracking-tighter">Creation Pending</span>
+                                                {duplicateIds.has(d.identifier) ? (
+                                                    <span className="text-[9px] text-amber-600 uppercase font-black tracking-tighter">Duplicate</span>
+                                                ) : (
+                                                    <span className="text-[9px] text-zinc-400 uppercase font-black tracking-tighter">Creation Pending</span>
+                                                )}
                                             </div>
                                             <button onClick={() => setStagedDevices(prev => prev.filter(x => x.id !== d.id))}><X className="w-4 h-4 text-zinc-400 hover:text-red-500 transition-colors" /></button>
                                         </div>
@@ -722,9 +801,15 @@ export default function DevicesPage() {
                             </div>
 
                             <div className="pt-6">
+                                {/* Bug 1 fix: block submission when duplicates exist */}
+                                {hasDuplicates && (
+                                    <p className="text-[10px] text-amber-600 font-bold text-center mb-2 flex items-center justify-center gap-1">
+                                        <AlertTriangle className="w-3 h-3" /> Resolve {duplicateIds.size} duplicate{duplicateIds.size > 1 ? 's' : ''} before submitting
+                                    </p>
+                                )}
                                 <Button
                                     className="w-full font-bold h-14 text-lg shadow-xl shadow-primary/20"
-                                    disabled={stagedDevices.length === 0 || isProcessingImport || !selectedModelId}
+                                    disabled={stagedDevices.length === 0 || isProcessingImport || !selectedModelId || hasDuplicates}
                                     onClick={processImport}
                                 >
                                     {isProcessingImport ? <Loader2 className="animate-spin mr-2" /> : <ShieldCheck className="mr-2" />}
@@ -785,34 +870,84 @@ export default function DevicesPage() {
                         )}
 
                         <div className="space-y-4">
-                          <label className="text-[10px] font-bold uppercase tracking-widest text-primary">Source File</label>
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-primary">Source File</label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const ws = XLSX.utils.aoa_to_sheet([['tracker_imei', 'sim_iccid']]);
+                                const wb = XLSX.utils.book_new();
+                                XLSX.utils.book_append_sheet(wb, ws, 'Relationships');
+                                XLSX.writeFile(wb, 'relationship_import_template.xlsx');
+                              }}
+                              className="text-[9px] text-primary font-bold uppercase tracking-widest hover:underline flex items-center gap-1"
+                            >
+                              Download Template
+                            </button>
+                          </div>
                           <div {...getLinkDropProps()} className={cn("border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer", isLinkDragActive ? "border-primary bg-primary/5 scale-[0.98]" : "border-border hover:border-zinc-400 hover:bg-muted/30")}>
                             <input {...getLinkInputProps()} />
                             <div className="bg-primary/10 w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2"><Link className="h-5 w-5 text-primary" /></div>
                             <p className="text-xs font-bold text-foreground">Drop Relationship File</p>
                           </div>
+                          <p className="text-[9px] text-zinc-500 font-medium leading-relaxed">
+                            Accepted columns: <code className="bg-muted px-1 rounded">tracker_imei</code> / <code className="bg-muted px-1 rounded">IMEI</code> / <code className="bg-muted px-1 rounded">identifier</code> for primary; <code className="bg-muted px-1 rounded">sim_iccid</code> / <code className="bg-muted px-1 rounded">ICCID</code> / <code className="bg-muted px-1 rounded">linked_identifier</code> for linked.
+                          </p>
                         </div>
                       </div>
 
                       <div className="flex flex-col h-[500px]">
                         <div className="flex items-center justify-between mb-2">
                           <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Relationship Queue ({stagedLinks.length})</h4>
-                          {stagedLinks.length > 0 && (<button onClick={() => setStagedLinks([])} className="text-[10px] text-red-500 font-bold hover:underline">Clear Queue</button>)}
+                          <div className="flex items-center gap-3">
+                            {/* Bug 3 fix: expose resolve button when link duplicates exist */}
+                            {hasLinkDuplicates && (
+                              <button onClick={resolveLinkDuplicates} className="text-[10px] text-amber-500 font-bold hover:underline flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" /> {duplicateLinkIds.size} duplicate{duplicateLinkIds.size > 1 ? 's' : ''} — Resolve
+                              </button>
+                            )}
+                            {stagedLinks.length > 0 && (<button onClick={() => setStagedLinks([])} className="text-[10px] text-red-500 font-bold hover:underline">Clear Queue</button>)}
+                          </div>
                         </div>
                         <div className="flex-1 overflow-y-auto pr-2 space-y-2 border border-border rounded-xl p-2 bg-muted/10">
                           {stagedLinks.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-zinc-500 italic text-xs gap-2"><Link className="h-8 w-8 opacity-20" /><span>No relationships staged</span></div>
                           ) : (
-                            stagedLinks.map((l) => (
-                              <div key={l.id} className="flex items-center justify-between p-3 bg-card border border-border rounded-xl group animate-in slide-in-from-right-2 shadow-sm">
-                                <div className="flex flex-col"><div className="flex items-center gap-2"><span className="font-mono text-xs font-bold text-foreground">{l.primaryIdentifier}</span><ArrowRight className="w-3 h-3 text-primary" /><span className="font-mono text-xs font-bold text-primary">{l.linkedIdentifier}</span></div></div>
-                                <button onClick={() => setStagedLinks(prev => prev.filter(x => x.id !== l.id))}><X className="w-4 h-4 text-zinc-400 hover:text-red-500 transition-colors" /></button>
-                              </div>
-                            ))
+                            stagedLinks.map((l) => {
+                              const linkKey = `${l.primaryIdentifier}-${l.linkedIdentifier}`;
+                              const isDuplicate = duplicateLinkIds.has(linkKey);
+                              return (
+                                // Gap 1 fix: highlight duplicate link rows amber
+                                <div key={l.id} className={cn(
+                                  "flex items-center justify-between p-3 bg-card border rounded-xl group animate-in slide-in-from-right-2 shadow-sm",
+                                  isDuplicate ? "border-amber-400/60 bg-amber-50/30" : "border-border"
+                                )}>
+                                  <div className="flex flex-col gap-0.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono text-xs font-bold text-foreground">{l.primaryIdentifier}</span>
+                                      <ArrowRight className="w-3 h-3 text-primary" />
+                                      <span className="font-mono text-xs font-bold text-primary">{l.linkedIdentifier}</span>
+                                    </div>
+                                    {isDuplicate && <span className="text-[9px] text-amber-600 uppercase font-black tracking-tighter">Duplicate Pair</span>}
+                                  </div>
+                                  <button onClick={() => setStagedLinks(prev => prev.filter(x => x.id !== l.id))}><X className="w-4 h-4 text-zinc-400 hover:text-red-500 transition-colors" /></button>
+                                </div>
+                              );
+                            })
                           )}
                         </div>
                         <div className="pt-6">
-                          <Button className="w-full font-bold h-14 text-lg shadow-xl shadow-primary/10" disabled={stagedLinks.length === 0 || isProcessingImport || (createMissing && (!defaultPrimaryModelId || !defaultLinkedModelId))} onClick={processLinkage}>
+                          {/* Bug 1 fix: block submission when link duplicates exist */}
+                          {hasLinkDuplicates && (
+                            <p className="text-[10px] text-amber-600 font-bold text-center mb-2 flex items-center justify-center gap-1">
+                              <AlertTriangle className="w-3 h-3" /> Resolve {duplicateLinkIds.size} duplicate pair{duplicateLinkIds.size > 1 ? 's' : ''} before submitting
+                            </p>
+                          )}
+                          <Button
+                            className="w-full font-bold h-14 text-lg shadow-xl shadow-primary/10"
+                            disabled={stagedLinks.length === 0 || isProcessingImport || hasLinkDuplicates || (createMissing && (!defaultPrimaryModelId || !defaultLinkedModelId))}
+                            onClick={processLinkage}
+                          >
                             {isProcessingImport ? <Loader2 className="animate-spin mr-2" /> : <Link className="mr-2" />} Link {stagedLinks.length} Pairs
                           </Button>
                         </div>
@@ -835,14 +970,15 @@ export default function DevicesPage() {
                 <form onSubmit={mainForm.handleSubmit(onSubmit)} className="space-y-6 py-4">
                   <FormField control={mainForm.control} name="identifier" render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Asset Identifier (IMEI/SN)</FormLabel>
+                        <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Asset Identifier (IMEI/SN) <span className="text-destructive">*</span></FormLabel>
                         <FormControl><Input placeholder="Enter IMEI or SN" className="bg-muted/30 border-border h-11" {...field} onChange={(e) => { const sanitized = sanitizeIMEI(e.target.value); field.onChange(sanitized); }} /></FormControl>
+                        <FormDescription className="text-[9px]">15-digit IMEI for trackers, ICCID for SIM cards, or serial number for peripherals.</FormDescription>
                         <FormMessage />
                       </FormItem>
                   )} />
                   <FormField control={mainForm.control} name="modelId" render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Hardware Model</FormLabel>
+                        <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Hardware Model <span className="text-destructive">*</span></FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                           <FormControl><SelectTrigger className="bg-muted/30 border-border h-11"><SelectValue placeholder="Select device model" /></SelectTrigger></FormControl>
                           <SelectContent>{models.map((model) => (<SelectItem key={model.id} value={model.id}>{model.brand} {model.name} ({model.assetType})</SelectItem>))}</SelectContent>
@@ -896,7 +1032,10 @@ export default function DevicesPage() {
                   </div>
 
                   <div className="pt-6 border-t border-border">
-                    <Button type="submit" className="w-full h-14 font-bold text-lg shadow-xl shadow-primary/10">Complete Registration</Button>
+                    <Button type="submit" disabled={mainForm.formState.isSubmitting} className="w-full h-14 font-bold text-lg shadow-xl shadow-primary/10">
+                      {mainForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      {mainForm.formState.isSubmitting ? 'Registering...' : 'Complete Registration'}
+                    </Button>
                   </div>
                 </form>
               </Form>
@@ -946,8 +1085,8 @@ export default function DevicesPage() {
                     <TableHeader className="bg-muted/50 border-b border-border sticky top-0 z-10">{table.getHeaderGroups().map((headerGroup) => (<TableRow key={headerGroup.id} className="hover:bg-transparent border-none">{headerGroup.headers.map((header) => (<TableHead key={header.id} className="h-12">{header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}</TableHead>))}</TableRow>))}</TableHeader>
                     <TableBody>
                     {table.getRowModel().rows?.length ? (
-                        table.getRowModel().rows.map((row) => (<TableRow key={row.id} data-state={row.getIsSelected() && "selected"} className="border-border/40 hover:bg-muted/30 transition-colors">{row.getVisibleCells().map((cell) => (<TableCell key={cell.id} className="py-3">{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>))}</TableRow>))
-                    ) : (<TableRow><TableCell colSpan={columns.length} className="h-64 text-center"><div className="flex flex-col items-center gap-3 opacity-40 italic text-zinc-500"><Package className="h-12 w-12" /><p>No assets found matching the current search criteria.</p></div></TableCell></TableRow>)}
+                        table.getRowModel().rows.map((row) => (<TableRow key={row.id} data-state={row.getIsSelected() && "selected"} className="border-border/40 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => setViewingDevice(row.original)}>{row.getVisibleCells().map((cell) => (<TableCell key={cell.id} className="py-3">{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>))}</TableRow>))
+                    ) : (<TableRow><TableCell colSpan={columns.length}><EmptyState icon={<PackageSearch size={44} />} title="No assets found" description="Try adjusting your filters or register a new device." /></TableCell></TableRow>)}
                     </TableBody>
                 </Table>
             </div>
@@ -964,29 +1103,124 @@ export default function DevicesPage() {
         </Card>
       </div>
 
-      <Dialog open={!!viewingDevice} onOpenChange={(open) => !open && setViewingDevice(null)}>
-        <DialogContent className="sm:max-w-[500px] bg-card border-border overflow-y-auto max-h-[90vh]">
-          <DialogHeader className="pb-6 border-b border-border"><DialogTitle className="flex items-center gap-2 text-2xl font-bold"><Smartphone className="w-6 h-6 text-primary"/> Asset Profile</DialogTitle></DialogHeader>
+      <Sheet open={!!viewingDevice} onOpenChange={(open) => !open && setViewingDevice(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-[440px] overflow-y-auto p-0">
           {viewingDevice && (
-            <div className="space-y-6 py-6">
-                <div className="flex items-center justify-between p-4 bg-muted/30 border border-border rounded-2xl">
-                    <div className="space-y-1"><span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Asset Record</span><div className="flex items-center gap-2"><span className="text-lg font-mono font-bold text-foreground tracking-wider">{viewingDevice.identifier}</span></div></div>
-                    <Badge>{viewingDevice.status}</Badge>
+            <>
+              {/* Sheet Header */}
+              <div className="p-6 border-b border-border bg-muted/20">
+                <div className="flex items-start justify-between gap-3 pr-8">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Asset Profile</span>
+                    <SheetTitle className="font-mono text-xl font-bold text-foreground tracking-wider">{viewingDevice.identifier}</SheetTitle>
+                    <div className="text-xs text-zinc-500">{viewingDevice.assetType?.replace(/_/g, ' ')}</div>
+                  </div>
+                  <span className={cn(
+                    "px-2.5 py-1 rounded text-[10px] font-black tracking-tighter uppercase border shrink-0",
+                    viewingDevice.status === 'IN_STOCK' ? "bg-emerald-50 text-emerald-600 border-emerald-200" :
+                    viewingDevice.status === 'DISPATCHED' ? "bg-primary/10 text-primary border-primary/20" :
+                    viewingDevice.status === 'DAMAGED' ? "bg-red-50 text-red-600 border-red-200" :
+                    "bg-muted text-zinc-500 border-border"
+                  )}>
+                    {viewingDevice.status?.replace(/_/g, ' ')}
+                  </span>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 bg-card border border-border rounded-2xl"><Package className="w-4 h-4 text-primary mb-2 opacity-50" /><span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Model Name</span><span className="font-bold text-foreground">{viewingDevice.modelName}</span></div>
-                    <div className="p-4 bg-card border border-border rounded-2xl"><ShieldCheck className="w-4 h-4 text-primary mb-2 opacity-50" /><span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Manufacturer</span><span className="font-bold text-foreground">{viewingDevice.brand}</span></div>
-                </div>
-                {relationships.length > 0 && (
-                    <div className="space-y-3 pt-2">
-                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Physical Associations</h4>
-                        <div className="grid grid-cols-1 gap-2">{relationships.map((rel) => (<div key={rel.id} className="flex items-center justify-between p-3 bg-primary/5 border border-primary/10 rounded-xl"><div className="flex flex-col"><span className="font-mono text-xs font-bold text-foreground">{rel.identifier}</span><span className="text-[9px] text-primary uppercase font-black tracking-tighter">{rel.modelName}</span></div><Link className="w-3 h-3 text-primary opacity-40" /></div>))}</div>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* Device Info */}
+                <div className="space-y-3">
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Device Info</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Model</span>
+                      <span className="text-sm font-bold text-foreground">{viewingDevice.modelName || '—'}</span>
                     </div>
+                    <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Manufacturer</span>
+                      <span className="text-sm font-bold text-foreground">{viewingDevice.brand || '—'}</span>
+                    </div>
+                    {viewingDevice.carrier && (
+                      <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Carrier</span>
+                        <span className="text-sm font-bold text-foreground">{viewingDevice.carrier}</span>
+                      </div>
+                    )}
+                    {viewingDevice.firmwareVersion && (
+                      <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Firmware</span>
+                        <span className="text-sm font-mono font-bold text-foreground">{viewingDevice.firmwareVersion}</span>
+                      </div>
+                    )}
+                    {viewingDevice.hardwareRevision && (
+                      <div className="p-3 bg-muted/30 rounded-xl border border-border col-span-2">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">HW Revision</span>
+                        <span className="text-sm font-mono font-bold text-foreground">{viewingDevice.hardwareRevision}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Timeline */}
+                <div className="space-y-3">
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Timeline</h4>
+                  <div className="space-y-0 divide-y divide-border/40">
+                    {viewingDevice.activationDate && (
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-xs text-zinc-500">Activation Date</span>
+                        <span className="text-xs font-bold text-foreground">{formatDate(viewingDevice.activationDate)}</span>
+                      </div>
+                    )}
+                    {viewingDevice.planExpiryDate && (
+                      <div className="flex items-center justify-between py-2.5">
+                        <span className="text-xs text-zinc-500">Plan Expiry</span>
+                        <span className="text-xs font-bold text-foreground">{formatDate(viewingDevice.planExpiryDate)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between py-2.5">
+                      <span className="text-xs text-zinc-500">Record Created</span>
+                      <span className="text-xs font-bold text-foreground">{formatDate(viewingDevice.createdAt)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Physical Associations */}
+                {relationships.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                      Physical Associations ({relationships.length})
+                    </h4>
+                    <div className="space-y-2">
+                      {relationships.map((rel) => (
+                        <div key={rel.id} className="flex items-center justify-between p-3 bg-primary/5 border border-primary/10 rounded-xl">
+                          <div className="flex items-center gap-2">
+                            <Link className="w-3.5 h-3.5 text-primary shrink-0" />
+                            <div className="flex flex-col">
+                              <span className="font-mono text-xs font-bold text-foreground">{rel.identifier}</span>
+                              <span className="text-[9px] text-primary uppercase font-black tracking-tighter">{rel.modelName}</span>
+                            </div>
+                          </div>
+                          <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">{rel.assetType?.replace(/_/g, ' ')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
-            </div>
+
+                {/* Actions */}
+                <div className="pt-2 border-t border-border">
+                  <Button
+                    className="w-full font-bold"
+                    onClick={() => { setViewingDevice(null); setEditingDevice(viewingDevice); }}
+                  >
+                    <Edit className="w-4 h-4 mr-2" /> Edit Device
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={!!editingDevice} onOpenChange={(open) => !open && setEditingDevice(null)}>
         <DialogContent className="sm:max-w-[500px] bg-card border-border overflow-y-auto max-h-[90vh]">
@@ -1044,27 +1278,102 @@ export default function DevicesPage() {
                   )} />
               </div>
 
-              <Button type="submit" className="w-full h-14 font-bold text-lg shadow-xl shadow-primary/10">Save Profile Updates</Button>
+              <Button type="submit" disabled={editForm.formState.isSubmitting} className="w-full h-14 font-bold text-lg shadow-xl shadow-primary/10">
+                {editForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {editForm.formState.isSubmitting ? 'Saving...' : 'Save Profile Updates'}
+              </Button>
             </form>
           </Form>
         </DialogContent>
       </Dialog>
 
       <AlertDialog open={!!uploadReport || !!refillReport} onOpenChange={() => { setUploadReport(null); setRefillReport(null); }}>
-        <AlertDialogContent className="bg-card border-border rounded-2xl shadow-2xl border-primary/20">
-          <AlertDialogHeader><AlertDialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground"><CheckCircle2 className="w-6 h-6 text-emerald-500" /> Bulk Processing Report</AlertDialogTitle></AlertDialogHeader>
-          {(uploadReport || refillReport) && (
+        <AlertDialogContent className="bg-card border-border rounded-2xl shadow-2xl border-primary/20 max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
+              <CheckCircle2 className="w-6 h-6 text-emerald-500" /> Bulk Processing Report
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-500 font-medium">
+              The system has finished processing your {refillReport ? 'asset ingestion' : 'relationship'} batch.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {/* Gap 3 fix: separate metric cards for refill (INGEST) and upload (LINK) results */}
+          {refillReport && (
             <div className="space-y-4 py-2">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="text-center p-3 rounded-xl bg-muted/30 border border-border"><p className="text-2xl font-black text-foreground">{(uploadReport || refillReport)?.totalRows}</p><p className="text-[10px] font-bold uppercase text-zinc-400 tracking-widest">Total Rows</p></div>
-                <div className="text-center p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20"><p className="text-2xl font-black text-emerald-600">{(uploadReport?.relationshipsCreated || 0) + (uploadReport?.devicesCreated || 0) + (refillReport?.devicesCreated || 0)}</p><p className="text-[10px] font-bold uppercase text-emerald-600 tracking-widest">Success</p></div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="text-center p-3 rounded-xl bg-muted/30 border border-border">
+                  <p className="text-2xl font-black text-foreground">{refillReport.totalRows}</p>
+                  <p className="text-[9px] font-bold uppercase text-zinc-400 tracking-widest">Total Rows</p>
+                </div>
+                <div className="text-center p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                  <p className="text-2xl font-black text-emerald-600">{refillReport.devicesCreated}</p>
+                  <p className="text-[9px] font-bold uppercase text-emerald-600 tracking-widest">Created</p>
+                </div>
+                <div className={cn("text-center p-3 rounded-xl border", refillReport.rowsSkipped > 0 ? "bg-red-500/10 border-red-500/20" : "bg-muted/30 border-border")}>
+                  <p className={cn("text-2xl font-black", refillReport.rowsSkipped > 0 ? "text-red-600" : "text-zinc-400")}>{refillReport.rowsSkipped}</p>
+                  <p className={cn("text-[9px] font-bold uppercase tracking-widest", refillReport.rowsSkipped > 0 ? "text-red-600" : "text-zinc-400")}>Skipped</p>
+                </div>
               </div>
-              {(uploadReport || refillReport)?.errors && (uploadReport || refillReport)!.errors.length > 0 && (
-                <div className="space-y-2"><label className="text-[10px] font-bold uppercase tracking-widest text-red-500">Processing Exceptions ({(uploadReport || refillReport)?.errors.length})</label><ScrollArea className="h-32 w-full rounded-xl border border-red-500/20 bg-red-500/5 p-3"><div className="space-y-2">{(uploadReport || refillReport)?.errors.map((err, i) => (<div key={i} className="text-[10px] text-red-600 font-medium flex items-start gap-2 leading-tight"><AlertCircle className="w-3 h-3 shrink-0 mt-0.5 opacity-70" /><span>{err}</span></div>))}</div></ScrollArea></div>
+              {refillReport.errors.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-red-500 flex items-center gap-2"><AlertCircle className="w-3 h-3" /> Failure Reasons ({refillReport.errors.length})</label>
+                  <ScrollArea className="h-40 w-full rounded-xl border border-red-500/20 bg-red-500/5 p-3 shadow-inner">
+                    <div className="space-y-2">
+                      {refillReport.errors.map((err, i) => (
+                        <div key={i} className="text-[11px] text-red-700 font-medium flex items-start gap-2 leading-relaxed bg-white/50 dark:bg-black/20 p-2 rounded-lg border border-red-500/10">
+                          <span className="bg-red-500 text-white w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 mt-0.5">{i+1}</span>
+                          <span>{err}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
               )}
             </div>
           )}
-          <AlertDialogFooter><AlertDialogAction className="w-full font-bold h-11 rounded-xl">Dismiss Report</AlertDialogAction></AlertDialogFooter>
+          {uploadReport && (
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-4 gap-3">
+                <div className="text-center p-3 rounded-xl bg-muted/30 border border-border">
+                  <p className="text-xl font-black text-foreground">{uploadReport.totalRows}</p>
+                  <p className="text-[9px] font-bold uppercase text-zinc-400 tracking-widest">Total</p>
+                </div>
+                <div className="text-center p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                  <p className="text-xl font-black text-emerald-600">{uploadReport.devicesCreated}</p>
+                  <p className="text-[9px] font-bold uppercase text-emerald-600 tracking-widest">Devices</p>
+                </div>
+                <div className="text-center p-3 rounded-xl bg-primary/10 border border-primary/20">
+                  <p className="text-xl font-black text-primary">{uploadReport.relationshipsCreated}</p>
+                  <p className="text-[9px] font-bold uppercase text-primary/80 tracking-widest">Links</p>
+                </div>
+                <div className={cn("text-center p-3 rounded-xl border", uploadReport.rowsSkipped > 0 ? "bg-red-500/10 border-red-500/20" : "bg-muted/30 border-border")}>
+                  <p className={cn("text-xl font-black", uploadReport.rowsSkipped > 0 ? "text-red-600" : "text-zinc-400")}>{uploadReport.rowsSkipped}</p>
+                  <p className={cn("text-[9px] font-bold uppercase tracking-widest", uploadReport.rowsSkipped > 0 ? "text-red-600" : "text-zinc-400")}>Skipped</p>
+                </div>
+              </div>
+              {uploadReport.errors.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-red-500 flex items-center gap-2"><AlertCircle className="w-3 h-3" /> Failure Reasons ({uploadReport.errors.length})</label>
+                  <ScrollArea className="h-40 w-full rounded-xl border border-red-500/20 bg-red-500/5 p-3 shadow-inner">
+                    <div className="space-y-2">
+                      {uploadReport.errors.map((err, i) => (
+                        <div key={i} className="text-[11px] text-red-700 font-medium flex items-start gap-2 leading-relaxed bg-white/50 dark:bg-black/20 p-2 rounded-lg border border-red-500/10">
+                          <span className="bg-red-500 text-white w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 mt-0.5">{i+1}</span>
+                          <span>{err}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              )}
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogAction className="w-full font-bold h-11 rounded-xl shadow-lg shadow-emerald-500/10">
+              Dismiss & Synchronize Ledger
+            </AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 

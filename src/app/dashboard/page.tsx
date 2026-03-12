@@ -5,11 +5,11 @@ import { fetchStatusDistributionReport, fetchInventoryByModelReport, fetchDevice
 import { StatusDistributionReport, InventoryByModelReport } from "@/types/reports"
 import { Device } from "@/types/devices"
 import Link from "next/link"
-import { 
-  Package, 
-  Send, 
-  CheckSquare, 
-  AlertTriangle, 
+import {
+  Package,
+  Send,
+  CheckSquare,
+  AlertTriangle,
   PlusCircle,
   Activity,
   ChevronRight,
@@ -19,25 +19,31 @@ import {
   History,
   ShieldCheck,
   AlertCircle,
-  Bell
+  Bell,
+  Info,
+  BarChart2,
+  PieChart as PieChartIcon,
+  RefreshCw
 } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { cn } from "@/lib/utils"
+import { Tooltip as UITooltip, TooltipContent as UITooltipContent, TooltipProvider as UITooltipProvider, TooltipTrigger as UITooltipTrigger } from "@/components/ui/tooltip"
+import { cn, formatDate } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
-import { 
-    BarChart, 
-    Bar, 
-    XAxis, 
-    YAxis, 
-    CartesianGrid, 
-    Tooltip, 
-    ResponsiveContainer, 
-    PieChart, 
-    Pie, 
+import { EmptyState } from "@/components/ui/empty-state"
+import {
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    PieChart,
+    Pie,
     Cell,
     LineChart,
     Line
@@ -52,6 +58,7 @@ export default function Home() {
   const [stockTrend, setStockTrend] = useState<any[]>([])
   const [dispatchTrend, setDispatchTrend] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [hasError, setHasError] = useState(false)
 
   useEffect(() => {
     async function loadStats() {
@@ -70,6 +77,7 @@ export default function Home() {
         setDispatchTrend(Array.isArray(dspTrend) ? dspTrend : (dspTrend as any)?.rows || [])
       } catch (err) {
         console.error("Failed to load dashboard stats", err)
+        setHasError(true)
       } finally {
         setLoading(false)
       }
@@ -143,11 +151,13 @@ export default function Home() {
     </div>
   )
 
+  const anomalyCount = (getCount("DAMAGED") as number) + (getCount("FAIL") as number) + (getCount("RMA") as number)
+
   const stats = [
-    { label: "Fleet Size", value: totalAssets, icon: Package, desc: "Global asset nodes" },
-    { label: "Available", value: getCount("IN_STOCK"), icon: CheckSquare, desc: "Ready for field" },
-    { label: "Field Deploy", value: getCount("DISPATCHED"), icon: Send, desc: "Active assignments" },
-    { label: "Anomalies", value: getCount("DAMAGED"), icon: AlertTriangle, desc: "Hardware failures" },
+    { label: "Fleet Size", value: totalAssets, icon: Package, desc: "Global asset nodes", tooltip: undefined },
+    { label: "Available", value: getCount("IN_STOCK"), icon: CheckSquare, desc: "Ready for field", tooltip: undefined },
+    { label: "Field Deploy", value: getCount("DISPATCHED"), icon: Send, desc: "Active assignments", tooltip: undefined },
+    { label: "Anomalies", value: anomalyCount, icon: AlertTriangle, desc: "Hardware failures", tooltip: "Devices with status DAMAGED, FAIL, or RMA" },
   ]
 
   return (
@@ -173,26 +183,40 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="border-border shadow-md bg-card overflow-hidden transition-all hover:scale-[1.02]">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="p-3 bg-primary/10 rounded-2xl">
-                    <stat.icon className="w-6 h-6 text-primary" />
+      <UITooltipProvider>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {stats.map((stat) => (
+            <Card key={stat.label} className="border-border shadow-md bg-card overflow-hidden transition-all hover:scale-[1.02]">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="p-3 bg-primary/10 rounded-2xl">
+                      <stat.icon className="w-6 h-6 text-primary" />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">{stat.label}</span>
+                    {stat.tooltip && (
+                      <UITooltip>
+                        <UITooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground/50 cursor-help hover:text-muted-foreground transition-colors" />
+                        </UITooltipTrigger>
+                        <UITooltipContent>
+                          <p>{stat.tooltip}</p>
+                        </UITooltipContent>
+                      </UITooltip>
+                    )}
+                  </div>
                 </div>
-                <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">{stat.label}</span>
-              </div>
-              <div className="mt-4 flex items-end justify-between">
-                <div className="text-4xl font-black text-foreground">{stat.value}</div>
-                <div className="text-[10px] font-bold text-primary bg-primary/5 px-2 py-1 rounded border border-primary/10 uppercase tracking-tighter">
-                    {stat.desc}
+                <div className="mt-4 flex items-end justify-between">
+                  <div className="text-4xl font-black text-foreground">{stat.value}</div>
+                  <div className="text-[10px] font-bold text-primary bg-primary/5 px-2 py-1 rounded border border-primary/10 uppercase tracking-tighter">
+                      {stat.desc}
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </UITooltipProvider>
 
       <Tabs defaultValue="overview" className="space-y-6">
         <div className="flex items-center justify-between">
@@ -224,25 +248,41 @@ export default function Home() {
                         <BarChart3 className="w-5 h-5 text-primary opacity-50" />
                     </CardHeader>
                     <CardContent className="h-[350px] pb-10">
-                        <ResponsiveContainer width="100%" height="100%">
+                        {hasError ? (
+                          <div className="flex items-center justify-center h-full gap-2 text-destructive">
+                            <AlertCircle className="h-5 w-5" />
+                            <span className="text-sm font-medium">Failed to load data</span>
+                            <Button variant="ghost" size="sm" onClick={() => window.location.reload()}>
+                              <RefreshCw className="h-3.5 w-3.5 mr-1" /> Retry
+                            </Button>
+                          </div>
+                        ) : modelData.length === 0 ? (
+                          <EmptyState
+                            icon={<BarChart2 size={40} />}
+                            title="No model data available"
+                            description="Add devices to see stock distribution by model."
+                            className="h-full"
+                          />
+                        ) : (
+                          <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={modelData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                <XAxis 
-                                    dataKey="name" 
-                                    axisLine={false} 
-                                    tickLine={false} 
+                                <XAxis
+                                    dataKey="name"
+                                    axisLine={false}
+                                    tickLine={false}
                                     tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}}
                                 />
-                                <YAxis 
-                                    axisLine={false} 
-                                    tickLine={false} 
+                                <YAxis
+                                    axisLine={false}
+                                    tickLine={false}
                                     tick={{fill: '#94a3b8', fontSize: 10}}
                                 />
-                                <Tooltip 
+                                <Tooltip
                                     cursor={{fill: 'rgba(0,0,0,0.04)'}}
-                                    contentStyle={{ 
-                                        borderRadius: '12px', 
-                                        border: '1px solid #e2e8f0', 
+                                    contentStyle={{
+                                        borderRadius: '12px',
+                                        border: '1px solid #e2e8f0',
                                         boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
                                         backgroundColor: 'rgba(255, 255, 255, 0.95)'
                                     }}
@@ -250,7 +290,8 @@ export default function Home() {
                                 <Bar dataKey="total" fill="#f97316" radius={[6, 6, 0, 0]} barSize={40} />
                                 <Bar dataKey="min" fill="#cbd5e1" radius={[6, 6, 0, 0]} barSize={40} />
                             </BarChart>
-                        </ResponsiveContainer>
+                          </ResponsiveContainer>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -260,34 +301,45 @@ export default function Home() {
                         <CardDescription>Lifecycle state of global nodes.</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[300px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart margin={{ top: 0, right: 20, bottom: 0, left: 20 }}>
-                                <Pie
-                                    data={statusData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={80}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                    label={({ name, percent }) => percent ? `${(percent * 100).toFixed(0)}%` : ""}
-                                    labelLine={false}
-                                >
-                                    {statusData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip />
-                            </PieChart>
-                        </ResponsiveContainer>
-                        <div className="grid grid-cols-2 gap-2 mt-4">
-                            {statusData.map((s, i) => (
-                                <div key={s.name} className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full" style={{backgroundColor: COLORS[i % COLORS.length]}} />
-                                    <span className="text-[10px] font-bold text-zinc-500 uppercase truncate">{s.name}</span>
-                                </div>
-                            ))}
-                        </div>
+                        {statusData.length === 0 ? (
+                          <EmptyState
+                            icon={<PieChartIcon size={36} />}
+                            title="No status data"
+                            description="Device status breakdown will appear here once assets are recorded."
+                            className="h-full"
+                          />
+                        ) : (
+                          <>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart margin={{ top: 0, right: 20, bottom: 0, left: 20 }}>
+                                    <Pie
+                                        data={statusData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={60}
+                                        outerRadius={80}
+                                        paddingAngle={5}
+                                        dataKey="value"
+                                        label={({ name, percent }) => percent ? `${(percent * 100).toFixed(0)}%` : ""}
+                                        labelLine={false}
+                                    >
+                                        {statusData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                </PieChart>
+                            </ResponsiveContainer>
+                            <div className="grid grid-cols-2 gap-2 mt-4">
+                                {statusData.map((s, i) => (
+                                    <div key={s.name} className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full" style={{backgroundColor: COLORS[i % COLORS.length]}} />
+                                        <span className="text-[10px] font-bold text-zinc-500 uppercase truncate">{s.name}</span>
+                                    </div>
+                                ))}
+                            </div>
+                          </>
+                        )}
                     </CardContent>
                 </Card>
             </div>
@@ -344,10 +396,10 @@ export default function Home() {
                                                 </div>
                                             </TableCell>
                                             <TableCell className="py-4 text-xs text-zinc-500">
-                                                {sim.activationDate ? new Date(sim.activationDate).toLocaleDateString() : 'Pending'}
+                                                {sim.activationDate ? formatDate(sim.activationDate) : 'Pending'}
                                             </TableCell>
                                             <TableCell className="py-4 text-xs font-bold text-foreground">
-                                                {sim.planExpiryDate ? new Date(sim.planExpiryDate).toLocaleDateString() : 'Manual Renewal'}
+                                                {sim.planExpiryDate ? formatDate(sim.planExpiryDate) : 'Manual Renewal'}
                                             </TableCell>
                                             <TableCell className="pr-6 py-4 text-right">
                                                 <span className={cn(
@@ -427,7 +479,7 @@ export default function Home() {
                                             <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{sim.carrier || 'Unknown Carrier'}</p>
                                         </div>
                                         <div className="text-right">
-                                            <p className="text-xs font-bold text-amber-600">Expires: {new Date(sim.planExpiryDate!).toLocaleDateString()}</p>
+                                            <p className="text-xs font-bold text-amber-600">Expires: {formatDate(sim.planExpiryDate)}</p>
                                             <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-tighter">Immediate action recommended</p>
                                         </div>
                                     </div>
@@ -453,10 +505,12 @@ export default function Home() {
                   const months = new Set<string>();
                   stockTrend.forEach((s: any) => months.add(s.month));
                   dispatchTrend.forEach((d: any) => months.add(d.month));
+                  const stockMap = new Map(stockTrend.map((s: any) => [s.month, Number(s.total_received ?? 0)]));
+                  const dispatchMap = new Map(dispatchTrend.map((d: any) => [d.month, Number(d.total_dispatched ?? 0)]));
                   return Array.from(months).sort().map(month => ({
                     month,
-                    received: Number(stockTrend.find((s: any) => s.month === month)?.total_received || 0),
-                    dispatched: Number(dispatchTrend.find((d: any) => d.month === month)?.total_dispatched || 0),
+                    received: stockMap.get(month) ?? 0,
+                    dispatched: dispatchMap.get(month) ?? 0,
                   }));
                 })()}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
