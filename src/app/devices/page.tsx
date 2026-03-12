@@ -122,6 +122,7 @@ const formSchema = z.object({
   identifier: z.string().min(1, { message: "Identifier is required." }),
   modelId: z.string().min(1, { message: "Please select a model." }),
   carrier: z.string().optional(),
+  msisdn: z.string().optional(),
   activationDate: z.string().optional(),
   planExpiryDate: z.string().optional(),
   firmwareVersion: z.string().optional(),
@@ -142,6 +143,7 @@ export default function DevicesPage() {
       identifier: "",
       modelId: "",
       carrier: "",
+      msisdn: "",
       activationDate: "",
       planExpiryDate: "",
       firmwareVersion: "",
@@ -156,6 +158,7 @@ export default function DevicesPage() {
       identifier: "",
       modelId: "",
       carrier: "",
+      msisdn: "",
       activationDate: "",
       planExpiryDate: "",
       firmwareVersion: "",
@@ -233,6 +236,7 @@ export default function DevicesPage() {
         identifier: editingDevice.identifier,
         modelId: editingDevice.modelId,
         carrier: editingDevice.carrier || "",
+        msisdn: editingDevice.msisdn || "",
         activationDate: editingDevice.activationDate ? new Date(editingDevice.activationDate).toISOString().slice(0, 16) : "",
         planExpiryDate: editingDevice.planExpiryDate ? new Date(editingDevice.planExpiryDate).toISOString().slice(0, 16) : "",
         firmwareVersion: editingDevice.firmwareVersion || "",
@@ -693,6 +697,12 @@ export default function DevicesPage() {
                                                         <FormControl><Input placeholder="Digicel / Flow" className="bg-muted/30 border-border h-9 text-xs" {...field} /></FormControl>
                                                     </FormItem>
                                                 )} />
+                                                <FormField control={mainForm.control} name="msisdn" render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel className="text-[10px] font-bold uppercase text-zinc-500">MSISDN (Phone #)</FormLabel>
+                                                        <FormControl><Input placeholder="e.g. 18762797507" className="bg-muted/30 border-border h-9 text-xs" {...field} /></FormControl>
+                                                    </FormItem>
+                                                )} />
                                                 <FormField control={mainForm.control} name="planExpiryDate" render={({ field }) => (
                                                     <FormItem className="flex flex-col">
                                                         <FormLabel className="text-[10px] font-bold uppercase text-zinc-500">Plan Expiry</FormLabel>
@@ -1009,6 +1019,9 @@ export default function DevicesPage() {
                         <FormField control={mainForm.control} name="carrier" render={({ field }) => (
                             <FormItem><FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Carrier</FormLabel><FormControl><Input placeholder="Digicel / Flow" className="bg-muted/30 border-border h-11" {...field} /></FormControl><FormMessage /></FormItem>
                             )} />
+                        <FormField control={mainForm.control} name="msisdn" render={({ field }) => (
+                            <FormItem><FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">MSISDN (Phone #)</FormLabel><FormControl><Input placeholder="e.g. 18762797507" className="bg-muted/30 border-border h-11" {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
                         <FormField control={mainForm.control} name="planExpiryDate" render={({ field }) => (
                             <FormItem className="flex flex-col">
                                 <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Plan Expiry</FormLabel>
@@ -1146,6 +1159,12 @@ export default function DevicesPage() {
                         <span className="text-sm font-bold text-foreground">{viewingDevice.carrier}</span>
                       </div>
                     )}
+                    {viewingDevice.msisdn && (
+                      <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">MSISDN (Phone #)</span>
+                        <span className="text-sm font-mono font-bold text-foreground">{viewingDevice.msisdn}</span>
+                      </div>
+                    )}
                     {viewingDevice.firmwareVersion && (
                       <div className="p-3 bg-muted/30 rounded-xl border border-border">
                         <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Firmware</span>
@@ -1255,6 +1274,9 @@ export default function DevicesPage() {
                 <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 border-t border-border pt-6">
                     <FormField control={editForm.control} name="carrier" render={({ field }) => (
                         <FormItem><FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Carrier</FormLabel><FormControl><Input placeholder="Digicel / Flow" className="bg-muted/30 border-border h-11" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                    <FormField control={editForm.control} name="msisdn" render={({ field }) => (
+                        <FormItem><FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">MSISDN (Phone #)</FormLabel><FormControl><Input placeholder="e.g. 18762797507" className="bg-muted/30 border-border h-11" {...field} /></FormControl><FormMessage /></FormItem>
                         )} />
                     <FormField control={editForm.control} name="planExpiryDate" render={({ field }) => (
                         <FormItem className="flex flex-col">

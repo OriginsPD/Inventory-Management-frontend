@@ -10,6 +10,7 @@ export type Device = {
   modelId: string;
   status: DeviceStatus;
   carrier?: string;
+  msisdn?: string | null;
   activationDate?: string;
   planExpiryDate?: string;
   firmwareVersion?: string;
@@ -28,6 +29,7 @@ export type CreateDeviceDto = {
   modelId: string;
   status?: DeviceStatus;
   carrier?: string;
+  msisdn?: string;
   activationDate?: string;
   planExpiryDate?: string;
   firmwareVersion?: string;
@@ -40,6 +42,7 @@ export type UpdateDeviceDto = {
   modelId?: string;
   status?: DeviceStatus;
   carrier?: string;
+  msisdn?: string;
   activationDate?: string;
   planExpiryDate?: string;
   firmwareVersion?: string;
@@ -53,6 +56,7 @@ export type StockRefillDto = {
   identifiers?: string[];
   pairedIdentifiers?: string[];
   carrier?: string;
+  msisdn?: string;
   activationDate?: string;
   planExpiryDate?: string;
   firmwareVersion?: string;

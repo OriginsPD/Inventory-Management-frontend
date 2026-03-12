@@ -36,7 +36,9 @@ import {
     ChevronDown,
     ChevronUp,
     ChevronsUpDown,
-    Send
+    Send,
+    MessageSquare,
+    BadgeCheck
 } from 'lucide-react';
 import { SortableHeader } from '@/components/ui/sortable-header';
 import { TableActions } from '@/components/ui/table-actions';
@@ -83,13 +85,24 @@ import {
     FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { cn, formatDate } from '@/lib/utils';
 
 const editFormSchema = z.object({
   location: z.string().min(2, { message: "Location is required." }),
+  subscriptionType: z.enum(["B2C", "B2B"]).optional(),
+  installationDate: z.string().optional(),
   signOffPath: z.string().optional(),
+  notes: z.string().optional(),
 });
 
 export default function DispatchHistoryPage() {
@@ -125,7 +138,12 @@ export default function DispatchHistoryPage() {
     if (editingDispatch) {
       editForm.reset({
         location: editingDispatch.location || "",
-        signOffPath: (editingDispatch as any).signOffPath || "",
+        subscriptionType: (editingDispatch.subscriptionType as "B2C" | "B2B" | undefined) ?? undefined,
+        installationDate: editingDispatch.installationDate
+          ? new Date(editingDispatch.installationDate).toISOString().split('T')[0]
+          : "",
+        signOffPath: editingDispatch.signOffPath || "",
+        notes: editingDispatch.notes || "",
       });
     }
   }, [editingDispatch, editForm]);
@@ -163,7 +181,12 @@ export default function DispatchHistoryPage() {
   const onEditSubmit = async (values: z.infer<typeof editFormSchema>) => {
     if (!editingDispatch) return;
     try {
-        const updated = await updateDispatch(editingDispatch.id, values);
+        const updated = await updateDispatch(editingDispatch.id, {
+          ...values,
+          installationDate: values.installationDate
+            ? new Date(values.installationDate).toISOString()
+            : undefined,
+        });
         setDispatches(prev => prev.map(d => d.id === updated.id ? { ...d, ...updated } : d));
         setEditingDispatch(null);
         toast({ title: "Update Successful", description: "Dispatch parameters modified." });
@@ -419,10 +442,28 @@ export default function DispatchHistoryPage() {
                       <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Destination</span>
                       <span className="text-sm font-bold text-foreground">{viewingDispatch.location || '—'}</span>
                     </div>
+                    <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Subscription Type</span>
+                      <span className="text-sm font-bold text-foreground">{viewingDispatch.subscriptionType || '—'}</span>
+                    </div>
+                    <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Installation Date</span>
+                      <span className="text-sm font-bold text-foreground">
+                        {viewingDispatch.installationDate ? formatDate(viewingDispatch.installationDate) : '—'}
+                      </span>
+                    </div>
                     <div className="p-3 bg-muted/30 rounded-xl border border-border col-span-2">
                       <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Dispatched By</span>
                       <span className="text-sm font-bold text-foreground">{viewingDispatch.dispatchedBy}</span>
                     </div>
+                    {viewingDispatch.notes && (
+                      <div className="p-3 bg-muted/30 rounded-xl border border-border col-span-2">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1 flex items-center gap-1">
+                          <MessageSquare className="w-3 h-3" /> Notes
+                        </span>
+                        <span className="text-sm text-foreground whitespace-pre-wrap">{viewingDispatch.notes}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -538,7 +579,58 @@ export default function DispatchHistoryPage() {
                   </FormItem>
                 )}
               />
-              
+
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={editForm.control}
+                  name="subscriptionType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Subscription Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                        <FormControl>
+                          <SelectTrigger className="bg-muted/30 border-border">
+                            <SelectValue placeholder="B2C / B2B" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="B2C">B2C</SelectItem>
+                          <SelectItem value="B2B">B2B</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="installationDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Installation Date</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} className="bg-muted/30 border-border" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={editForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Notes / Comments</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} className="bg-muted/30 border-border resize-none min-h-[80px]" placeholder="Operational notes..." />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <div className="space-y-4">
                 <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
                     <FileText className="w-3 h-3"/> Digital Sign-off Proof

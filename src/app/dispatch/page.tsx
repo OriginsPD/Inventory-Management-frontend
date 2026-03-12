@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { Send, History, CheckCircle2, X, Package, FileText, Plus, Search } from "lucide-react"
+import { Send, History, CheckCircle2, X, Package, FileText, Plus, Search, Calendar, MessageSquare } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -17,6 +17,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Card,
   CardContent,
@@ -45,7 +46,10 @@ const formSchema = z.object({
   deviceIds: z.array(z.string()).min(1, { message: "Select at least one asset." }),
   customerId: z.string().min(1, { message: "Please select a customer." }),
   location: z.string().min(2, { message: "Location is required." }),
+  subscriptionType: z.enum(["B2C", "B2B"]).optional(),
+  installationDate: z.string().optional(),
   signOffPath: z.string().optional(),
+  notes: z.string().optional(),
 })
 
 export default function DispatchPage() {
@@ -65,7 +69,10 @@ export default function DispatchPage() {
       deviceIds: [],
       customerId: "",
       location: "",
+      subscriptionType: undefined,
+      installationDate: "",
       signOffPath: "",
+      notes: "",
     },
   })
 
@@ -136,6 +143,7 @@ export default function DispatchPage() {
       await createDispatch({
           ...values,
           dispatchDate: new Date().toISOString(),
+          installationDate: values.installationDate ? new Date(values.installationDate).toISOString() : undefined,
           dispatchedBy: session?.user.name || "System User",
       } as any)
       toast({ title: "Bundle Dispatched", description: `${values.deviceIds.length} assets have been successfully assigned.` })
@@ -224,6 +232,46 @@ export default function DispatchPage() {
                                 )}
                             />
 
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="subscriptionType"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Subscription Type</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                                        <FormControl>
+                                            <SelectTrigger className="h-12 border-border bg-muted/10">
+                                            <SelectValue placeholder="B2C / B2B..." />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="B2C">B2C — Business to Consumer</SelectItem>
+                                            <SelectItem value="B2B">B2B — Business to Business</SelectItem>
+                                        </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={form.control}
+                                    name="installationDate"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-1">
+                                            <Calendar className="w-3 h-3" /> Installation Date
+                                        </FormLabel>
+                                        <FormControl>
+                                        <Input type="date" className="h-12 border-border bg-muted/10" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+                            </div>
+
                             <div className="space-y-4">
                                 <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
                                     <FileText className="w-3 h-3"/> Digital Sign-off Proof
@@ -266,6 +314,26 @@ export default function DispatchPage() {
                                 </div>
                             </div>
                         </div>
+
+                        <FormField
+                            control={form.control}
+                            name="notes"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                                    <MessageSquare className="w-3 h-3" /> Operational Notes / Comments
+                                </FormLabel>
+                                <FormControl>
+                                <Textarea
+                                    placeholder="Any remarks, GPRS config, portal instructions, or technician notes..."
+                                    className="border-border bg-muted/10 resize-none min-h-[80px]"
+                                    {...field}
+                                />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
 
                         <Button type="submit" className="w-full h-14 bg-primary hover:bg-primary/90 text-lg font-bold">
                             <Send className="w-5 h-5 mr-3" /> Confirm & Execute Dispatch
