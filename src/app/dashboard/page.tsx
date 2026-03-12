@@ -101,15 +101,9 @@ export default function Home() {
       return inventoryReport.filter(m => Number(m.totalStock || 0) <= Number(m.minStock || 0) && Number(m.minStock || 0) > 0);
   }, [inventoryReport]);
 
-  const expiringSIMs = useMemo(() => {
+  const deactivatedSIMs = useMemo(() => {
       if (!Array.isArray(allDevices)) return [];
-      const thirtyDaysFromNow = new Date();
-      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-      return allDevices.filter(d => 
-          d.planExpiryDate && 
-          new Date(d.planExpiryDate) <= thirtyDaysFromNow &&
-          new Date(d.planExpiryDate) >= new Date()
-      );
+      return allDevices.filter(d => d.simPlanStatus === 'DEACTIVATED');
   }, [allDevices]);
 
   // Chart Data Formatting
@@ -173,7 +167,7 @@ export default function Home() {
         <div className="flex items-center gap-3">
             <div className="bg-muted px-4 py-2 rounded-xl border border-border flex items-center gap-2">
                 <Bell className="w-4 h-4 text-primary" />
-                <span className="text-xs font-bold text-foreground">{(criticalModels.length + expiringSIMs.length)} Alerts active</span>
+                <span className="text-xs font-bold text-foreground">{(criticalModels.length + deactivatedSIMs.length)} Alerts active</span>
             </div>
             <Button size="lg" className="font-bold shadow-lg shadow-primary/20" asChild>
                 <Link href="/dispatch">
@@ -225,7 +219,7 @@ export default function Home() {
                 <TabsTrigger value="connectivity" className="px-6 font-bold uppercase text-[10px] tracking-widest">Connectivity Intelligence</TabsTrigger>
                 <TabsTrigger value="alerts" className="px-6 font-bold uppercase text-[10px] tracking-widest flex gap-2">
                     Operational Alerts
-                    {(criticalModels.length + expiringSIMs.length) > 0 && (
+                    {(criticalModels.length + deactivatedSIMs.length) > 0 && (
                         <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                     )}
                 </TabsTrigger>
@@ -360,7 +354,7 @@ export default function Home() {
                             </div>
                             <div className="text-right border-l border-border pl-4">
                                 <p className="text-[10px] font-bold text-zinc-400 uppercase">Risk Level</p>
-                                <p className="text-lg font-black text-amber-600">{expiringSIMs.length}</p>
+                                <p className="text-lg font-black text-amber-600">{deactivatedSIMs.length}</p>
                             </div>
                         </div>
                     </div>
@@ -372,20 +366,17 @@ export default function Home() {
                                 <TableHead className="pl-6 py-4 text-[10px] uppercase font-bold text-zinc-500">ICCID / Identifier</TableHead>
                                 <TableHead className="py-4 text-[10px] uppercase font-bold text-zinc-500">Carrier</TableHead>
                                 <TableHead className="py-4 text-[10px] uppercase font-bold text-zinc-500">Activation</TableHead>
-                                <TableHead className="py-4 text-[10px] uppercase font-bold text-zinc-500">Plan Expiry</TableHead>
+                                <TableHead className="py-4 text-[10px] uppercase font-bold text-zinc-500">Plan Status</TableHead>
                                 <TableHead className="pr-6 py-4 text-right text-[10px] uppercase font-bold text-zinc-500">Health Status</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {allDevices.filter(d => d.carrier || d.planExpiryDate).length === 0 ? (
+                            {allDevices.filter(d => d.carrier || d.msisdn).length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={5} className="h-48 text-center text-zinc-400 italic">No SIM-specialized metadata found in fleet.</TableCell>
                                 </TableRow>
                             ) : (
-                                allDevices.filter(d => d.carrier || d.planExpiryDate).map(sim => {
-                                    const isExpiring = expiringSIMs.some(e => e.id === sim.id);
-                                    const hasExpired = sim.planExpiryDate && new Date(sim.planExpiryDate) < new Date();
-                                    
+                                allDevices.filter(d => d.carrier || d.msisdn).map(sim => {
                                     return (
                                         <TableRow key={sim.id} className="border-border/40 hover:bg-muted/30 transition-colors">
                                             <TableCell className="pl-6 py-4 font-mono text-xs font-bold text-foreground uppercase">{sim.identifier}</TableCell>
@@ -398,17 +389,30 @@ export default function Home() {
                                             <TableCell className="py-4 text-xs text-zinc-500">
                                                 {sim.activationDate ? formatDate(sim.activationDate) : 'Pending'}
                                             </TableCell>
-                                            <TableCell className="py-4 text-xs font-bold text-foreground">
-                                                {sim.planExpiryDate ? formatDate(sim.planExpiryDate) : 'Manual Renewal'}
+                                            <TableCell className="py-4">
+                                                {sim.simPlanStatus ? (
+                                                    <span className={cn(
+                                                        "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase border",
+                                                        sim.simPlanStatus === 'ACTIVE'
+                                                            ? "bg-green-50 text-green-700 border-green-200"
+                                                            : "bg-red-50 text-red-600 border-red-200"
+                                                    )}>
+                                                        <span className={cn("w-1.5 h-1.5 rounded-full", sim.simPlanStatus === 'ACTIVE' ? "bg-green-500" : "bg-red-500")} />
+                                                        {sim.simPlanStatus}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] text-zinc-400">—</span>
+                                                )}
                                             </TableCell>
                                             <TableCell className="pr-6 py-4 text-right">
                                                 <span className={cn(
                                                     "px-2 py-0.5 rounded text-[10px] font-black uppercase border",
-                                                    hasExpired ? "bg-red-50 text-red-600 border-red-200" :
-                                                    isExpiring ? "bg-amber-50 text-amber-600 border-amber-200" :
-                                                    "bg-emerald-50 text-emerald-600 border-emerald-200"
+                                                    sim.simPlanStatus === 'DEACTIVATED' ? "bg-red-50 text-red-600 border-red-200" :
+                                                    sim.simPlanStatus === 'ACTIVE' ? "bg-green-50 text-green-700 border-green-200" :
+                                                    "bg-zinc-50 text-zinc-500 border-zinc-200"
                                                 )}>
-                                                    {hasExpired ? 'Disconnected' : isExpiring ? 'Risk: Low Data' : 'Optimal'}
+                                                    {sim.simPlanStatus === 'DEACTIVATED' ? 'Deactivated' :
+                                                     sim.simPlanStatus === 'ACTIVE' ? 'Active' : 'Unknown'}
                                                 </span>
                                             </TableCell>
                                         </TableRow>
@@ -461,26 +465,28 @@ export default function Home() {
                     <CardHeader className="flex flex-row items-center gap-4">
                         <div className="p-2 bg-amber-50 rounded-lg"><Wifi className="w-5 h-5 text-amber-600" /></div>
                         <div>
-                            <CardTitle className="text-lg">SIM Plan Expiring Soon</CardTitle>
-                            <CardDescription>SIM assets reaching data cap or plan term end within 30 days.</CardDescription>
+                            <CardTitle className="text-lg">Deactivated SIM Plans</CardTitle>
+                            <CardDescription>SIM assets with a deactivated plan status requiring attention.</CardDescription>
                         </div>
                     </CardHeader>
                     <CardContent>
-                        {expiringSIMs.length === 0 ? (
+                        {deactivatedSIMs.length === 0 ? (
                             <div className="p-8 text-center text-zinc-400 italic text-sm border-2 border-dashed border-border rounded-xl">
-                                No connectivity expirations detected in the next 30 days.
+                                No SIM plans currently deactivated.
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                {expiringSIMs.map(sim => (
+                                {deactivatedSIMs.map(sim => (
                                     <div key={sim.id} className="flex items-center justify-between p-4 bg-muted/30 border border-border rounded-xl">
                                         <div>
                                             <p className="font-mono text-xs font-bold text-foreground">{sim.identifier}</p>
                                             <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{sim.carrier || 'Unknown Carrier'}</p>
                                         </div>
                                         <div className="text-right">
-                                            <p className="text-xs font-bold text-amber-600">Expires: {formatDate(sim.planExpiryDate)}</p>
-                                            <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-tighter">Immediate action recommended</p>
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase border bg-red-50 text-red-600 border-red-200">Deactivated</span>
+                                            {sim.simPlanStatusChangedAt && (
+                                                <p className="text-[10px] text-zinc-400 mt-1">Since: {formatDate(sim.simPlanStatusChangedAt)}</p>
+                                            )}
                                         </div>
                                     </div>
                                 ))}

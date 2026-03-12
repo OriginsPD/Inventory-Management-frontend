@@ -3,6 +3,7 @@
 import { DeviceModel } from "./device-models";
 
 export type DeviceStatus = 'IN_STOCK' | 'DISPATCHED' | 'TESTING' | 'DAMAGED' | 'REPLACED' | 'PROMOTIONAL' | 'RMA';
+export type SimPlanStatus = 'ACTIVE' | 'DEACTIVATED';
 
 export type Device = {
   id: string;
@@ -12,7 +13,8 @@ export type Device = {
   carrier?: string;
   msisdn?: string | null;
   activationDate?: string;
-  planExpiryDate?: string;
+  simPlanStatus?: SimPlanStatus | null;
+  simPlanStatusChangedAt?: string | null;
   firmwareVersion?: string;
   hardwareRevision?: string;
   pairedDeviceId?: string | null;
@@ -31,7 +33,7 @@ export type CreateDeviceDto = {
   carrier?: string;
   msisdn?: string;
   activationDate?: string;
-  planExpiryDate?: string;
+  simPlanStatus?: SimPlanStatus;
   firmwareVersion?: string;
   hardwareRevision?: string;
   pairedDeviceId?: string | null;
@@ -44,7 +46,7 @@ export type UpdateDeviceDto = {
   carrier?: string;
   msisdn?: string;
   activationDate?: string;
-  planExpiryDate?: string;
+  simPlanStatus?: SimPlanStatus;
   firmwareVersion?: string;
   hardwareRevision?: string;
   pairedDeviceId?: string | null;
@@ -55,16 +57,17 @@ export type StockRefillDto = {
   quantity?: number;
   identifiers?: string[];
   pairedIdentifiers?: string[];
+  msisdns?: string[];
   carrier?: string;
   msisdn?: string;
   activationDate?: string;
-  planExpiryDate?: string;
+  simPlanStatus?: SimPlanStatus;
   firmwareVersion?: string;
   hardwareRevision?: string;
 };
 
 export type BulkUploadRelationshipDto = {
-  relationships: { primaryIdentifier: string; linkedIdentifier: string }[];
+  relationships: { primaryIdentifier: string; linkedIdentifier: string; linkedMsisdn?: string }[];
   createMissing: boolean;
   defaultPrimaryModelId?: string;
   defaultLinkedModelId?: string;

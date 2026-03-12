@@ -124,7 +124,7 @@ const formSchema = z.object({
   carrier: z.string().optional(),
   msisdn: z.string().optional(),
   activationDate: z.string().optional(),
-  planExpiryDate: z.string().optional(),
+  simPlanStatus: z.enum(['ACTIVE', 'DEACTIVATED']).optional(),
   firmwareVersion: z.string().optional(),
   hardwareRevision: z.string().optional(),
   pairedDeviceId: z.string().optional(),
@@ -134,6 +134,7 @@ interface StagedDevice {
   identifier: string
   id: string
   pairedIdentifier?: string
+  msisdn?: string
 }
 
 export default function DevicesPage() {
@@ -145,7 +146,7 @@ export default function DevicesPage() {
       carrier: "",
       msisdn: "",
       activationDate: "",
-      planExpiryDate: "",
+      simPlanStatus: "ACTIVE",
       firmwareVersion: "",
       hardwareRevision: "",
       pairedDeviceId: "",
@@ -160,7 +161,7 @@ export default function DevicesPage() {
       carrier: "",
       msisdn: "",
       activationDate: "",
-      planExpiryDate: "",
+      simPlanStatus: "ACTIVE",
       firmwareVersion: "",
       hardwareRevision: "",
       pairedDeviceId: "",
@@ -189,7 +190,7 @@ export default function DevicesPage() {
 
   // Import Specific State
   const [stagedDevices, setStagedDevices] = useState<StagedDevice[]>([])
-  const [stagedLinks, setStagedLinks] = useState<{ primaryIdentifier: string, linkedIdentifier: string, id: string }[]>([])
+  const [stagedLinks, setStagedLinks] = useState<{ primaryIdentifier: string, linkedIdentifier: string, linkedMsisdn?: string, id: string }[]>([])
   const [isProcessingImport, setIsProcessingImport] = useState(false)
   const [manualIdentifier, setManualIdentifier] = useState("")
 
@@ -238,7 +239,7 @@ export default function DevicesPage() {
         carrier: editingDevice.carrier || "",
         msisdn: editingDevice.msisdn || "",
         activationDate: editingDevice.activationDate ? new Date(editingDevice.activationDate).toISOString().slice(0, 16) : "",
-        planExpiryDate: editingDevice.planExpiryDate ? new Date(editingDevice.planExpiryDate).toISOString().slice(0, 16) : "",
+        simPlanStatus: (editingDevice.simPlanStatus as any) || "ACTIVE",
         firmwareVersion: editingDevice.firmwareVersion || "",
         hardwareRevision: editingDevice.hardwareRevision || "",
         pairedDeviceId: editingDevice.pairedDeviceId || "",
@@ -370,10 +371,12 @@ export default function DevicesPage() {
       const report = await refillStock({
         modelId: sId,
         identifiers: stagedDevices.map(d => d.identifier),
+        msisdns: stagedDevices.map(d => d.msisdn || ""),
         pairedIdentifiers: stagedDevices.map(d => d.pairedIdentifier || ""),
         carrier: values.carrier || undefined,
+        msisdn: values.msisdn || undefined,
         activationDate: values.activationDate ? new Date(values.activationDate).toISOString() : undefined,
-        planExpiryDate: values.planExpiryDate ? new Date(values.planExpiryDate).toISOString() : undefined,
+        simPlanStatus: (values.simPlanStatus as any) || 'ACTIVE',
         firmwareVersion: values.firmwareVersion || undefined,
         hardwareRevision: values.hardwareRevision || undefined,
       })
@@ -396,6 +399,7 @@ export default function DevicesPage() {
             relationships: stagedLinks.map(l => ({
                 primaryIdentifier: l.primaryIdentifier,
                 linkedIdentifier: l.linkedIdentifier,
+                linkedMsisdn: l.linkedMsisdn,
             })),
             createMissing,
             ...(createMissing && defaultPrimaryModelId ? { defaultPrimaryModelId } : {}),
@@ -424,6 +428,7 @@ export default function DevicesPage() {
         const newLinks = parsedData.map((row) => ({
             primaryIdentifier: String(row["tracker_imei"] || row["IMEI"] || row["identifier"] || "").trim(),
             linkedIdentifier: String(row["sim_iccid"] || row["ICCID"] || row["linked_identifier"] || "").trim(),
+            linkedMsisdn: String(row["msisdn"] || row["MSISDN"] || row["sim_msisdn"] || "").trim() || undefined,
             id: crypto.randomUUID(),
         })).filter((l) => l.primaryIdentifier.length >= 3 && l.linkedIdentifier.length >= 3)
         if (parsedData.length > 0 && newLinks.length === 0) {
@@ -453,7 +458,8 @@ export default function DevicesPage() {
         const workbook = XLSX.read(data, { type: "binary" })
         const parsedData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[]
         const newDevices = parsedData.map((row) => ({
-            identifier: String(row.IMEI || row.identifier || row.imei || "").trim(),
+            identifier: String(row.IMEI || row.ICCID || row.identifier || row.imei || "").trim(),
+            msisdn: String(row.msisdn || row.MSISDN || row.phone || row.phone_number || "").trim() || undefined,
             id: crypto.randomUUID(),
         })).filter((d) => d.identifier.length >= 3)
         if (parsedData.length > 0 && newDevices.length === 0) {
@@ -697,19 +703,20 @@ export default function DevicesPage() {
                                                         <FormControl><Input placeholder="Digicel / Flow" className="bg-muted/30 border-border h-9 text-xs" {...field} /></FormControl>
                                                     </FormItem>
                                                 )} />
-                                                <FormField control={mainForm.control} name="msisdn" render={({ field }) => (
+                                                <FormField control={mainForm.control} name="simPlanStatus" render={({ field }) => (
                                                     <FormItem>
-                                                        <FormLabel className="text-[10px] font-bold uppercase text-zinc-500">MSISDN (Phone #)</FormLabel>
-                                                        <FormControl><Input placeholder="e.g. 18762797507" className="bg-muted/30 border-border h-9 text-xs" {...field} /></FormControl>
-                                                    </FormItem>
-                                                )} />
-                                                <FormField control={mainForm.control} name="planExpiryDate" render={({ field }) => (
-                                                    <FormItem className="flex flex-col">
-                                                        <FormLabel className="text-[10px] font-bold uppercase text-zinc-500">Plan Expiry</FormLabel>
-                                                        <Popover>
-                                                            <PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full bg-muted/30 border-border pl-3 text-left font-normal h-9 text-xs", !field.value && "text-muted-foreground")}>{field.value ? format(new Date(field.value), "PP") : <span>Pick date</span>}<CalendarIcon className="ml-auto h-3 w-3 opacity-50" /></Button></FormControl></PopoverTrigger>
-                                                            <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value ? new Date(field.value) : undefined} onSelect={(date) => field.onChange(date?.toISOString())} initialFocus /></PopoverContent>
-                                                        </Popover>
+                                                        <FormLabel className="text-[10px] font-bold uppercase text-zinc-500">Plan Status</FormLabel>
+                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                            <FormControl>
+                                                                <SelectTrigger className="bg-muted/30 border-border h-9 text-xs">
+                                                                    <SelectValue placeholder="Select status" />
+                                                                </SelectTrigger>
+                                                            </FormControl>
+                                                            <SelectContent>
+                                                                <SelectItem value="ACTIVE">Active</SelectItem>
+                                                                <SelectItem value="DEACTIVATED">Deactivated</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
                                                     </FormItem>
                                                 )} />
                                             </div>
@@ -729,7 +736,10 @@ export default function DevicesPage() {
                                                 <button
                                                   type="button"
                                                   onClick={() => {
-                                                    const ws = XLSX.utils.aoa_to_sheet([['IMEI']]);
+                                                    const headers = selectedModel?.assetType === 'SIM'
+                                                      ? [['ICCID', 'msisdn']]
+                                                      : [['IMEI']];
+                                                    const ws = XLSX.utils.aoa_to_sheet(headers);
                                                     const wb = XLSX.utils.book_new();
                                                     XLSX.utils.book_append_sheet(wb, ws, 'Devices');
                                                     XLSX.writeFile(wb, 'device_import_template.xlsx');
@@ -746,7 +756,10 @@ export default function DevicesPage() {
                                                 <p className="text-xs font-bold text-foreground">Drop Excel/CSV here</p>
                                             </div>
                                             <p className="text-[9px] text-zinc-500 font-medium mb-4 leading-relaxed">
-                                              Accepted column: <code className="bg-muted px-1 rounded">IMEI</code> / <code className="bg-muted px-1 rounded">identifier</code> / <code className="bg-muted px-1 rounded">imei</code>
+                                              Accepted column: <code className="bg-muted px-1 rounded">IMEI</code> / <code className="bg-muted px-1 rounded">ICCID</code> / <code className="bg-muted px-1 rounded">identifier</code> / <code className="bg-muted px-1 rounded">imei</code>
+                                              {selectedModel?.assetType === 'SIM' && (
+                                                <> &mdash; Optional SIM column: <code className="bg-muted px-1 rounded">msisdn</code> / <code className="bg-muted px-1 rounded">MSISDN</code> / <code className="bg-muted px-1 rounded">phone</code></>
+                                              )}
                                             </p>
 
                                             <div className="relative mb-4"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div><div className="relative flex justify-center text-[10px] uppercase"><span className="bg-card px-2 text-zinc-500 font-bold">Or Hardware Scanner</span></div></div>
@@ -802,6 +815,9 @@ export default function DevicesPage() {
                                                     <span className="text-[9px] text-amber-600 uppercase font-black tracking-tighter">Duplicate</span>
                                                 ) : (
                                                     <span className="text-[9px] text-zinc-400 uppercase font-black tracking-tighter">Creation Pending</span>
+                                                )}
+                                                {selectedModel?.assetType === 'SIM' && d.msisdn && (
+                                                    <span className="text-[9px] text-zinc-400 font-mono flex items-center gap-1"><Wifi className="w-2.5 h-2.5" />{d.msisdn}</span>
                                                 )}
                                             </div>
                                             <button onClick={() => setStagedDevices(prev => prev.filter(x => x.id !== d.id))}><X className="w-4 h-4 text-zinc-400 hover:text-red-500 transition-colors" /></button>
@@ -885,7 +901,7 @@ export default function DevicesPage() {
                             <button
                               type="button"
                               onClick={() => {
-                                const ws = XLSX.utils.aoa_to_sheet([['tracker_imei', 'sim_iccid']]);
+                                const ws = XLSX.utils.aoa_to_sheet([['tracker_imei', 'sim_iccid', 'msisdn']]);
                                 const wb = XLSX.utils.book_new();
                                 XLSX.utils.book_append_sheet(wb, ws, 'Relationships');
                                 XLSX.writeFile(wb, 'relationship_import_template.xlsx');
@@ -901,7 +917,7 @@ export default function DevicesPage() {
                             <p className="text-xs font-bold text-foreground">Drop Relationship File</p>
                           </div>
                           <p className="text-[9px] text-zinc-500 font-medium leading-relaxed">
-                            Accepted columns: <code className="bg-muted px-1 rounded">tracker_imei</code> / <code className="bg-muted px-1 rounded">IMEI</code> / <code className="bg-muted px-1 rounded">identifier</code> for primary; <code className="bg-muted px-1 rounded">sim_iccid</code> / <code className="bg-muted px-1 rounded">ICCID</code> / <code className="bg-muted px-1 rounded">linked_identifier</code> for linked.
+                            Accepted columns: <code className="bg-muted px-1 rounded">tracker_imei</code> / <code className="bg-muted px-1 rounded">IMEI</code> / <code className="bg-muted px-1 rounded">identifier</code> for primary; <code className="bg-muted px-1 rounded">sim_iccid</code> / <code className="bg-muted px-1 rounded">ICCID</code> / <code className="bg-muted px-1 rounded">linked_identifier</code> for linked. Optional: <code className="bg-muted px-1 rounded">msisdn</code> for SIM phone number.
                           </p>
                         </div>
                       </div>
@@ -939,6 +955,7 @@ export default function DevicesPage() {
                                       <span className="font-mono text-xs font-bold text-primary">{l.linkedIdentifier}</span>
                                     </div>
                                     {isDuplicate && <span className="text-[9px] text-amber-600 uppercase font-black tracking-tighter">Duplicate Pair</span>}
+                                    {l.linkedMsisdn && <span className="text-[9px] text-zinc-400 font-mono flex items-center gap-1"><Wifi className="w-2.5 h-2.5" />{l.linkedMsisdn}</span>}
                                   </div>
                                   <button onClick={() => setStagedLinks(prev => prev.filter(x => x.id !== l.id))}><X className="w-4 h-4 text-zinc-400 hover:text-red-500 transition-colors" /></button>
                                 </div>
@@ -1022,13 +1039,20 @@ export default function DevicesPage() {
                         <FormField control={mainForm.control} name="msisdn" render={({ field }) => (
                             <FormItem><FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">MSISDN (Phone #)</FormLabel><FormControl><Input placeholder="e.g. 18762797507" className="bg-muted/30 border-border h-11" {...field} /></FormControl><FormMessage /></FormItem>
                             )} />
-                        <FormField control={mainForm.control} name="planExpiryDate" render={({ field }) => (
-                            <FormItem className="flex flex-col">
-                                <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Plan Expiry</FormLabel>
-                                <Popover>
-                                    <PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full bg-muted/30 border-border pl-3 text-left font-normal h-11", !field.value && "text-muted-foreground")}>{field.value ? format(new Date(field.value), "PPP") : <span>Pick a date</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value ? new Date(field.value) : undefined} onSelect={(date) => field.onChange(date?.toISOString())} disabled={(date) => date < new Date("1900-01-01")} initialFocus /></PopoverContent>
-                                </Popover>
+                        <FormField control={mainForm.control} name="simPlanStatus" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Plan Status</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl>
+                                        <SelectTrigger className="bg-muted/30 border-border h-11">
+                                            <SelectValue placeholder="Select status" />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="ACTIVE">Active</SelectItem>
+                                        <SelectItem value="DEACTIVATED">Deactivated</SelectItem>
+                                    </SelectContent>
+                                </Select>
                                 <FormMessage />
                             </FormItem>
                             )} />
@@ -1190,10 +1214,21 @@ export default function DevicesPage() {
                         <span className="text-xs font-bold text-foreground">{formatDate(viewingDevice.activationDate)}</span>
                       </div>
                     )}
-                    {viewingDevice.planExpiryDate && (
-                      <div className="flex items-center justify-between py-2.5">
-                        <span className="text-xs text-zinc-500">Plan Expiry</span>
-                        <span className="text-xs font-bold text-foreground">{formatDate(viewingDevice.planExpiryDate)}</span>
+                    {viewingDevice.simPlanStatus && (
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Plan Status</p>
+                        <span className={cn(
+                          "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase border",
+                          viewingDevice.simPlanStatus === 'ACTIVE'
+                            ? "bg-green-50 text-green-700 border-green-200"
+                            : "bg-red-50 text-red-600 border-red-200"
+                        )}>
+                          <span className={cn("w-1.5 h-1.5 rounded-full", viewingDevice.simPlanStatus === 'ACTIVE' ? "bg-green-500" : "bg-red-500")} />
+                          {viewingDevice.simPlanStatus}
+                        </span>
+                        {viewingDevice.simPlanStatusChangedAt && (
+                          <p className="text-[9px] text-zinc-400 mt-1">Changed: {formatDate(viewingDevice.simPlanStatusChangedAt)}</p>
+                        )}
                       </div>
                     )}
                     <div className="flex items-center justify-between py-2.5">
@@ -1278,13 +1313,20 @@ export default function DevicesPage() {
                     <FormField control={editForm.control} name="msisdn" render={({ field }) => (
                         <FormItem><FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">MSISDN (Phone #)</FormLabel><FormControl><Input placeholder="e.g. 18762797507" className="bg-muted/30 border-border h-11" {...field} /></FormControl><FormMessage /></FormItem>
                         )} />
-                    <FormField control={editForm.control} name="planExpiryDate" render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                            <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Plan Expiry</FormLabel>
-                            <Popover>
-                                <PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full bg-muted/30 border-border pl-3 text-left font-normal h-11", !field.value && "text-muted-foreground")}>{field.value ? format(new Date(field.value), "PPP") : <span>Pick a date</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value ? new Date(field.value) : undefined} onSelect={(date) => field.onChange(date?.toISOString())} disabled={(date) => date < new Date("1900-01-01")} initialFocus /></PopoverContent>
-                            </Popover>
+                    <FormField control={editForm.control} name="simPlanStatus" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Plan Status</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                    <SelectTrigger className="bg-muted/30 border-border h-11">
+                                        <SelectValue placeholder="Select status" />
+                                    </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    <SelectItem value="ACTIVE">Active</SelectItem>
+                                    <SelectItem value="DEACTIVATED">Deactivated</SelectItem>
+                                </SelectContent>
+                            </Select>
                             <FormMessage />
                         </FormItem>
                         )} />

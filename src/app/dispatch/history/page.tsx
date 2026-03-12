@@ -38,7 +38,9 @@ import {
     ChevronsUpDown,
     Send,
     MessageSquare,
-    BadgeCheck
+    BadgeCheck,
+    HardHat,
+    Globe
 } from 'lucide-react';
 import { SortableHeader } from '@/components/ui/sortable-header';
 import { TableActions } from '@/components/ui/table-actions';
@@ -100,6 +102,10 @@ import { cn, formatDate } from '@/lib/utils';
 const editFormSchema = z.object({
   location: z.string().min(2, { message: "Location is required." }),
   subscriptionType: z.enum(["B2C", "B2B"]).optional(),
+  subscriptionPlan: z.string().optional(),
+  technicianAssigned: z.string().optional(),
+  sourcePortal: z.string().optional(),
+  targetPortal: z.string().optional(),
   installationDate: z.string().optional(),
   signOffPath: z.string().optional(),
   notes: z.string().optional(),
@@ -139,6 +145,10 @@ export default function DispatchHistoryPage() {
       editForm.reset({
         location: editingDispatch.location || "",
         subscriptionType: (editingDispatch.subscriptionType as "B2C" | "B2B" | undefined) ?? undefined,
+        subscriptionPlan: editingDispatch.subscriptionPlan || "",
+        technicianAssigned: editingDispatch.technicianAssigned || "",
+        sourcePortal: editingDispatch.sourcePortal || "",
+        targetPortal: editingDispatch.targetPortal || "",
         installationDate: editingDispatch.installationDate
           ? new Date(editingDispatch.installationDate).toISOString().split('T')[0]
           : "",
@@ -452,6 +462,32 @@ export default function DispatchHistoryPage() {
                         {viewingDispatch.installationDate ? formatDate(viewingDispatch.installationDate) : '—'}
                       </span>
                     </div>
+                    <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Sub Type / Plan</span>
+                      <span className="text-sm font-bold text-foreground">{viewingDispatch.subscriptionPlan || '—'}</span>
+                    </div>
+                    <div className="p-3 bg-muted/30 rounded-xl border border-border col-span-2">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-1 mb-1">
+                        <HardHat className="w-3 h-3" /> Technician Assigned
+                      </span>
+                      <span className="text-sm font-bold text-foreground">{viewingDispatch.technicianAssigned || '—'}</span>
+                    </div>
+                    {(viewingDispatch.sourcePortal || viewingDispatch.targetPortal) && (
+                      <>
+                        <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                          <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-1 mb-1">
+                            <Globe className="w-3 h-3" /> Existing Portal
+                          </span>
+                          <span className="text-sm font-bold text-foreground">{viewingDispatch.sourcePortal || '—'}</span>
+                        </div>
+                        <div className="p-3 bg-muted/30 rounded-xl border border-border">
+                          <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-1 mb-1">
+                            <Globe className="w-3 h-3" /> Move To Portal
+                          </span>
+                          <span className="text-sm font-bold text-foreground">{viewingDispatch.targetPortal || '—'}</span>
+                        </div>
+                      </>
+                    )}
                     <div className="p-3 bg-muted/30 rounded-xl border border-border col-span-2">
                       <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 block mb-1">Dispatched By</span>
                       <span className="text-sm font-bold text-foreground">{viewingDispatch.dispatchedBy}</span>
@@ -604,12 +640,76 @@ export default function DispatchHistoryPage() {
                 />
                 <FormField
                   control={editForm.control}
+                  name="subscriptionPlan"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Sub Type / Plan</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. WGPS..." {...field} className="bg-muted/30 border-border" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={editForm.control}
+                  name="technicianAssigned"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-1">
+                        <HardHat className="w-3 h-3" /> Technician
+                      </FormLabel>
+                      <FormControl>
+                        <Input placeholder="Technician name..." {...field} className="bg-muted/30 border-border" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
                   name="installationDate"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Installation Date</FormLabel>
                       <FormControl>
                         <Input type="date" {...field} className="bg-muted/30 border-border" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={editForm.control}
+                  name="sourcePortal"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-1">
+                        <Globe className="w-3 h-3" /> Existing Portal
+                      </FormLabel>
+                      <FormControl>
+                        <Input placeholder="Current portal..." {...field} className="bg-muted/30 border-border" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="targetPortal"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-1">
+                        <Globe className="w-3 h-3" /> Move To Portal
+                      </FormLabel>
+                      <FormControl>
+                        <Input placeholder="Target portal..." {...field} className="bg-muted/30 border-border" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

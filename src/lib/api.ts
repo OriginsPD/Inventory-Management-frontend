@@ -412,7 +412,7 @@ export const createDispatch = async (data: CreateDispatchDto): Promise<Dispatch>
 
 
 
-export const updateDispatch = async (id: string, data: Pick<CreateDispatchDto, 'location' | 'signOffPath' | 'notes' | 'subscriptionType' | 'installationDate'>): Promise<Dispatch> => {
+export const updateDispatch = async (id: string, data: Pick<CreateDispatchDto, 'location' | 'signOffPath' | 'notes' | 'subscriptionType' | 'installationDate' | 'subscriptionPlan' | 'technicianAssigned' | 'sourcePortal' | 'targetPortal'>): Promise<Dispatch> => {
 
 
 

@@ -11,6 +11,10 @@ export type Dispatch = {
   dispatchedBy: string;
   location?: string | null;
   subscriptionType?: SubscriptionType | null;
+  subscriptionPlan?: string | null;
+  technicianAssigned?: string | null;
+  sourcePortal?: string | null;
+  targetPortal?: string | null;
   signOffPath?: string | null;
   notes?: string | null;
   createdAt: string;
@@ -25,6 +29,10 @@ export type CreateDispatchDto = {
   dispatchedBy: string;
   location?: string;
   subscriptionType?: SubscriptionType;
+  subscriptionPlan?: string;
+  technicianAssigned?: string;
+  sourcePortal?: string;
+  targetPortal?: string;
   signOffPath?: string;
   notes?: string;
 };

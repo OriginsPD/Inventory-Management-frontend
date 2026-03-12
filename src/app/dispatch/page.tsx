@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { Send, History, CheckCircle2, X, Package, FileText, Plus, Search, Calendar, MessageSquare } from "lucide-react"
+import { Send, History, CheckCircle2, X, Package, FileText, Plus, Search, Calendar, MessageSquare, HardHat, Globe } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -47,6 +47,10 @@ const formSchema = z.object({
   customerId: z.string().min(1, { message: "Please select a customer." }),
   location: z.string().min(2, { message: "Location is required." }),
   subscriptionType: z.enum(["B2C", "B2B"]).optional(),
+  subscriptionPlan: z.string().optional(),
+  technicianAssigned: z.string().optional(),
+  sourcePortal: z.string().optional(),
+  targetPortal: z.string().optional(),
   installationDate: z.string().optional(),
   signOffPath: z.string().optional(),
   notes: z.string().optional(),
@@ -70,6 +74,10 @@ export default function DispatchPage() {
       customerId: "",
       location: "",
       subscriptionType: undefined,
+      subscriptionPlan: "",
+      technicianAssigned: "",
+      sourcePortal: "",
+      targetPortal: "",
       installationDate: "",
       signOffPath: "",
       notes: "",
@@ -257,6 +265,38 @@ export default function DispatchPage() {
 
                                 <FormField
                                     control={form.control}
+                                    name="subscriptionPlan"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Sub Type / Plan</FormLabel>
+                                        <FormControl>
+                                        <Input placeholder="e.g. WGPS, Standard..." className="h-12 border-border bg-muted/10" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="technicianAssigned"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-1">
+                                            <HardHat className="w-3 h-3" /> Technician Assigned
+                                        </FormLabel>
+                                        <FormControl>
+                                        <Input placeholder="Technician name..." className="h-12 border-border bg-muted/10" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={form.control}
                                     name="installationDate"
                                     render={({ field }) => (
                                     <FormItem>
@@ -265,6 +305,40 @@ export default function DispatchPage() {
                                         </FormLabel>
                                         <FormControl>
                                         <Input type="date" className="h-12 border-border bg-muted/10" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="sourcePortal"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-1">
+                                            <Globe className="w-3 h-3" /> Existing Portal
+                                        </FormLabel>
+                                        <FormControl>
+                                        <Input placeholder="Current tracking portal..." className="h-12 border-border bg-muted/10" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+
+                                <FormField
+                                    control={form.control}
+                                    name="targetPortal"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-1">
+                                            <Globe className="w-3 h-3" /> Move To Portal
+                                        </FormLabel>
+                                        <FormControl>
+                                        <Input placeholder="Target tracking portal..." className="h-12 border-border bg-muted/10" {...field} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
