@@ -1,6 +1,6 @@
 // frontend/src/types/device-models.d.ts
 
-export type DeviceModelDeviceModelAssetType = 'TRACKER' | 'SIM' | 'PERIPHERAL' | 'DASH_CAM' | 'SD_CARD' | 'PANIC_BUTTON' | 'FUEL_SENSOR' | 'KEYFOB' | 'TRAVEL_ADAPTER';
+export type DeviceModelAssetType = 'TRACKER' | 'SIM' | 'PERIPHERAL' | 'DASH_CAM' | 'SD_CARD' | 'PANIC_BUTTON' | 'FUEL_SENSOR' | 'KEYFOB' | 'TRAVEL_ADAPTER';
 
 
 export type DeviceModel = {

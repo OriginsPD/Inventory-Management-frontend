@@ -15,6 +15,7 @@ import {
   Layers,
   RotateCcw,
   UserCog,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { authClient } from '@/lib/auth-client';
@@ -71,22 +72,39 @@ const Sidebar = () => {
             );
           })}
 
-          {(session?.user as any)?.role === 'ADMIN' && (
-            <Link
-              href="/admin/users"
-              className={cn(
-                "flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group",
-                pathname.startsWith('/admin/users')
-                  ? "bg-gradient-to-r from-primary to-orange-600 text-white shadow-lg shadow-primary/30 ring-1 ring-primary/40"
-                  : "text-zinc-500 hover:bg-orange-50/80 hover:text-primary dark:text-slate-400 dark:hover:bg-primary/10"
-              )}
-            >
-              <UserCog size={18} className={cn(
-                "transition-colors",
-                pathname.startsWith('/admin/users') ? "text-white" : "text-zinc-400 group-hover:text-primary"
-              )} />
-              <span className="text-sm font-medium">User Management</span>
-            </Link>
+          {(session?.user as any)?.role === 'SUPERADMIN' && (
+            <>
+              <Link
+                href="/admin/users"
+                className={cn(
+                  "flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group",
+                  pathname.startsWith('/admin/users')
+                    ? "bg-gradient-to-r from-primary to-orange-600 text-white shadow-lg shadow-primary/30 ring-1 ring-primary/40"
+                    : "text-zinc-500 hover:bg-orange-50/80 hover:text-primary dark:text-slate-400 dark:hover:bg-primary/10"
+                )}
+              >
+                <UserCog size={18} className={cn(
+                  "transition-colors",
+                  pathname.startsWith('/admin/users') ? "text-white" : "text-zinc-400 group-hover:text-primary"
+                )} />
+                <span className="text-sm font-medium">User Management</span>
+              </Link>
+              <Link
+                href="/admin/trash"
+                className={cn(
+                  "flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group",
+                  pathname.startsWith('/admin/trash')
+                    ? "bg-gradient-to-r from-primary to-orange-600 text-white shadow-lg shadow-primary/30 ring-1 ring-primary/40"
+                    : "text-zinc-500 hover:bg-orange-50/80 hover:text-primary dark:text-slate-400 dark:hover:bg-primary/10"
+                )}
+              >
+                <Trash2 size={18} className={cn(
+                  "transition-colors",
+                  pathname.startsWith('/admin/trash') ? "text-white" : "text-zinc-400 group-hover:text-primary"
+                )} />
+                <span className="text-sm font-medium">Trash & Restore</span>
+              </Link>
+            </>
           )}
         </nav>
       </div>

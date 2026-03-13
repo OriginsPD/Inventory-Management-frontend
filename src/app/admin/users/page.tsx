@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { authClient } from "@/lib/auth-client"
-import { fetchUsers, updateUserRole } from "@/lib/api"
-import { User } from "@/types/users"
+import { fetchUsers, updateUserRole, createUser, updateUser } from "@/lib/api"
+import { User, CreateUserDto, UpdateUserDto } from "@/types/users"
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -16,7 +16,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table"
-import { UserCog, ChevronDown, Search, Shield } from "lucide-react"
+import { UserCog, ChevronDown, Search, Shield, Plus, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardHeader, CardTitle } from "@/components/ui/card"
@@ -35,16 +35,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 
-const ROLES = ['ADMIN', 'INVENTORY_OFFICER', 'VIEWER'] as const
+const ROLES = ['SUPERADMIN', 'TECHNICIAN', 'VIEWER'] as const
 
 const roleBadgeClass = (role: string) => {
   switch (role) {
-    case 'ADMIN': return 'bg-red-50 text-red-700 border border-red-100'
-    case 'INVENTORY_OFFICER': return 'bg-blue-50 text-blue-700 border border-blue-100'
+    case 'SUPERADMIN': return 'bg-red-50 text-red-700 border border-red-100'
+    case 'TECHNICIAN': return 'bg-blue-50 text-blue-700 border border-blue-100'
     default: return 'bg-muted text-zinc-600 border border-border'
   }
 }
@@ -57,17 +65,28 @@ export default function UserManagementPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const { toast } = useToast()
 
+  // Create dialog state
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createForm, setCreateForm] = useState<CreateUserDto>({ name: '', email: '', password: '', role: 'VIEWER' })
+  const [creating, setCreating] = useState(false)
+
+  // Edit dialog state
+  const [editOpen, setEditOpen] = useState(false)
+  const [editTarget, setEditTarget] = useState<User | null>(null)
+  const [editForm, setEditForm] = useState<UpdateUserDto>({ name: '' })
+  const [editing, setEditing] = useState(false)
+
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 
   useEffect(() => {
-    if (!isPending && (session?.user as any)?.role !== 'ADMIN') {
+    if (!isPending && (session?.user as any)?.role !== 'SUPERADMIN') {
       router.replace('/dashboard')
     }
   }, [session, isPending, router])
 
   useEffect(() => {
-    if (!isPending && (session?.user as any)?.role === 'ADMIN') {
+    if (!isPending && (session?.user as any)?.role === 'SUPERADMIN') {
       loadUsers()
     }
   }, [session, isPending])
@@ -76,7 +95,7 @@ export default function UserManagementPage() {
     try {
       const data = await fetchUsers()
       setUsers(data)
-    } catch (err: any) {
+    } catch {
       toast({ title: "Error", description: "Could not load users.", variant: "destructive" })
     } finally {
       setLoading(false)
@@ -93,6 +112,45 @@ export default function UserManagementPage() {
       toast({ title: "Error", description: err.message, variant: "destructive" })
     } finally {
       setUpdatingId(null)
+    }
+  }
+
+  async function handleCreateUser(e: React.FormEvent) {
+    e.preventDefault()
+    setCreating(true)
+    try {
+      const newUser = await createUser(createForm)
+      setUsers(prev => [...prev, newUser])
+      setCreateOpen(false)
+      setCreateForm({ name: '', email: '', password: '', role: 'VIEWER' })
+      toast({ title: "User Created", description: `${newUser.name} has been added to the system.` })
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to create user.", variant: "destructive" })
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  function openEditDialog(user: User) {
+    setEditTarget(user)
+    setEditForm({ name: user.name })
+    setEditOpen(true)
+  }
+
+  async function handleEditUser(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editTarget) return
+    setEditing(true)
+    try {
+      const updated = await updateUser(editTarget.id, editForm)
+      setUsers(prev => prev.map(u => u.id === updated.id ? updated : u))
+      setEditOpen(false)
+      setEditTarget(null)
+      toast({ title: "User Updated", description: `${updated.name}'s information has been updated.` })
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to update user.", variant: "destructive" })
+    } finally {
+      setEditing(false)
     }
   }
 
@@ -161,6 +219,20 @@ export default function UserManagementPage() {
         <span className="text-xs text-zinc-400">{new Date(row.getValue("createdAt")).toLocaleDateString()}</span>
       ),
     },
+    {
+      id: "actions",
+      header: () => <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Actions</span>,
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 px-2 text-xs text-zinc-500 hover:text-primary hover:bg-primary/5"
+          onClick={() => openEditDialog(row.original)}
+        >
+          <Pencil className="h-3 w-3 mr-1" /> Edit
+        </Button>
+      ),
+    },
   ]
 
   const table = useReactTable({
@@ -199,14 +271,22 @@ export default function UserManagementPage() {
           </h1>
           <p className="text-muted-foreground text-zinc-500">Manage system users and their role assignments.</p>
         </div>
-        <div className="relative w-full max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" />
-          <Input
-            placeholder="Search by name..."
-            value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
-            onChange={(e) => table.getColumn("name")?.setFilterValue(e.target.value)}
-            className="pl-8 bg-card border-border"
-          />
+        <div className="flex items-center gap-3">
+          <div className="relative w-full max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" />
+            <Input
+              placeholder="Search by name..."
+              value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
+              onChange={(e) => table.getColumn("name")?.setFilterValue(e.target.value)}
+              className="pl-8 bg-card border-border"
+            />
+          </div>
+          <Button
+            onClick={() => setCreateOpen(true)}
+            className="shrink-0 text-xs font-bold"
+          >
+            <Plus className="h-4 w-4 mr-1" /> Create User
+          </Button>
         </div>
       </div>
 
@@ -267,6 +347,115 @@ export default function UserManagementPage() {
           </div>
         </div>
       </Card>
+
+      {/* Create User Dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5 text-primary" /> Create New User
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateUser} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="create-name" className="text-xs font-bold uppercase tracking-wider text-zinc-500">Full Name</Label>
+              <Input
+                id="create-name"
+                placeholder="John Smith"
+                value={createForm.name}
+                onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))}
+                required
+                className="border-border"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-email" className="text-xs font-bold uppercase tracking-wider text-zinc-500">Email Address</Label>
+              <Input
+                id="create-email"
+                type="email"
+                placeholder="john@example.com"
+                value={createForm.email}
+                onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))}
+                required
+                className="border-border"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-password" className="text-xs font-bold uppercase tracking-wider text-zinc-500">Password</Label>
+              <Input
+                id="create-password"
+                type="password"
+                placeholder="Minimum 8 characters"
+                value={createForm.password}
+                onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))}
+                required
+                minLength={8}
+                className="border-border"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-role" className="text-xs font-bold uppercase tracking-wider text-zinc-500">Role</Label>
+              <Select
+                value={createForm.role}
+                onValueChange={val => setCreateForm(f => ({ ...f, role: val as CreateUserDto['role'] }))}
+              >
+                <SelectTrigger id="create-role" className="border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLES.map(r => (
+                    <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={creating} className="font-bold">
+                {creating ? "Creating..." : "Create User"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-primary" /> Edit User
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEditUser} className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Email</Label>
+              <p className="text-sm text-zinc-500 bg-muted/50 px-3 py-2 rounded border border-border">{editTarget?.email}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-name" className="text-xs font-bold uppercase tracking-wider text-zinc-500">Full Name</Label>
+              <Input
+                id="edit-name"
+                placeholder="Full name"
+                value={editForm.name ?? ''}
+                onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                required
+                className="border-border"
+              />
+            </div>
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setEditOpen(false)} disabled={editing}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={editing} className="font-bold">
+                {editing ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

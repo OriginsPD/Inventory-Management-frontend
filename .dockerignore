@@ -3,4 +3,7 @@ node_modules
 .git
 .env*
 dist
-bun.lock
+*.md
+*.log
+.vscode
+coverage

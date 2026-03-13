@@ -1,5 +1,6 @@
 // frontend/src/lib/api.ts
 import { DeviceModel, CreateDeviceModelDto, UpdateDeviceModelDto } from '@/types/device-models';
+import { CreateUserDto, UpdateUserDto } from '@/types/users';
 import { Device, CreateDeviceDto, UpdateDeviceDto, StockRefillDto, BulkUploadRelationshipDto, BulkUploadReport, RefillReport } from '@/types/devices';
 import { Customer, CreateCustomerDto, UpdateCustomerDto } from '@/types/customers';
 import { Dispatch, CreateDispatchDto } from '@/types/dispatches';
@@ -46,25 +47,7 @@ const handleResponse = async (response: Response) => {
 };
 
 const getAuthHeaders = (): Record<string, string> => {
-
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-    if (typeof window !== 'undefined') {
-
-        // Better Auth uses cookies, but we can also check for session token if stored
-
-        const token = localStorage.getItem('better-auth.session-token');
-
-        if (token) {
-
-            headers['Authorization'] = `Bearer ${token}`;
-
-        }
-
-    }
-
-    return headers;
-
+    return { 'Content-Type': 'application/json' };
 };
 
 
@@ -720,5 +703,74 @@ export const fetchStockTrend = async () => {
 
 export const fetchDispatchTrend = async () => {
   const response = await authenticatedFetch(`${API_BASE_URL}/reports/dispatch-trend`);
+  return handleResponse(response);
+};
+
+// --- Admin: User Management ---
+
+export const createUser = async (data: CreateUserDto): Promise<User> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/users`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+};
+
+export const updateUser = async (id: string, data: UpdateUserDto): Promise<User> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/users/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+};
+
+// --- Admin: Trash & Restore - Devices ---
+
+export const fetchTrashedDevices = async (): Promise<Device[]> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/devices/trash`);
+  return handleResponse(response);
+};
+
+export const restoreDevice = async (id: string): Promise<void> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/devices/${id}/restore`, { method: 'POST' });
+  return handleResponse(response);
+};
+
+export const hardDeleteDevice = async (id: string): Promise<void> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/devices/${id}/permanent`, { method: 'DELETE' });
+  return handleResponse(response);
+};
+
+// --- Admin: Trash & Restore - Customers ---
+
+export const fetchTrashedCustomers = async (): Promise<Customer[]> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/customers/trash`);
+  return handleResponse(response);
+};
+
+export const restoreCustomer = async (id: string): Promise<void> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/customers/${id}/restore`, { method: 'POST' });
+  return handleResponse(response);
+};
+
+export const hardDeleteCustomer = async (id: string): Promise<void> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/customers/${id}/permanent`, { method: 'DELETE' });
+  return handleResponse(response);
+};
+
+// --- Admin: Trash & Restore - Device Models ---
+
+export const fetchTrashedDeviceModels = async (): Promise<DeviceModel[]> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/device-models/trash`);
+  return handleResponse(response);
+};
+
+export const restoreDeviceModel = async (id: string): Promise<void> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/device-models/${id}/restore`, { method: 'POST' });
+  return handleResponse(response);
+};
+
+export const hardDeleteDeviceModel = async (id: string): Promise<void> => {
+  const response = await authenticatedFetch(`${API_BASE_URL}/device-models/${id}/permanent`, { method: 'DELETE' });
   return handleResponse(response);
 };
